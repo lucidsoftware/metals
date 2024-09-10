@@ -1,8 +1,10 @@
 package scala.meta.internal.metals
 
+import java.io.IOException
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.lang.SecurityException
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -402,21 +404,30 @@ final class FormattingProvider(
     }
   }
 
-  def validateWorkspace(projectRoot: AbsolutePath): Future[Unit] = {
-    scalafmtConf(projectRoot) match {
-      case Some(conf) =>
-        val text = conf.toInputFromBuffers(buffers).text
-        ScalafmtConfig.parse(text) match {
-          case Failure(e) =>
-            scribe.error(s"Failed to parse ${conf}", e)
-            Future.unit
-          case Success(values) =>
-            checkIfDialectUpgradeRequired(values, conf)
-        }
-      case None =>
-        Future.unit
-    }
-  }
+  def validateWorkspace(projectRoot: AbsolutePath): Future[Unit] = (
+    for {
+      conf <- scalafmtConf(projectRoot)
+      text <- try {
+        Some(conf.toInputFromBuffers(buffers).text)
+      } catch {
+        // The exceptions thrown by `Files.readAllBytes`, which we use under the hood
+        case _: IOException | _: SecurityException =>
+          client.showMessage(Messages.UnableToReadScalafmtConf(conf))
+
+          None
+      }
+
+      result <- ScalafmtConfig.parse(text) match {
+        case Failure(e) =>
+          scribe.error(s"Failed to parse ${conf}", e)
+
+          None
+
+        case Success(values) =>
+          Some(checkIfDialectUpgradeRequired(values, conf))
+      }
+    } yield result
+  ).getOrElse(Future.unit)
 
   private def scalafmtConf(projectRoot: AbsolutePath): Option[AbsolutePath] = {
     val configpath = userConfig().scalafmtConfigPath
