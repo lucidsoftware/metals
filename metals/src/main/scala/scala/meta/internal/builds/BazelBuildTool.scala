@@ -60,9 +60,7 @@ case class BazelBuildTool(
 
   override def buildServerName: String = BazelBuildTool.bspName
 
-  override def shouldRegenerateBspJson(currentVersion: String): Boolean = {
-    currentVersion != BazelBuildTool.version
-  }
+  override def shouldRegenerateBspJson(currentVersion: String): Boolean = false
 
   override def ensurePrerequisites(workspace: AbsolutePath): Unit = {
     workspace.list.find(_.filename.endsWith(".bazelproject")) match {
