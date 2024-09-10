@@ -1,8 +1,10 @@
 package scala.meta.internal.metals
 
+import java.io.IOException
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.lang.SecurityException
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileSystems
 import java.nio.file.Files
