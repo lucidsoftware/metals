@@ -668,7 +668,10 @@ object Messages {
   }
 
   def UnableToReadScalafmtConf(path: AbsolutePath) =
-    new MessageParams(MessageType.Error, s"Unable to read the Scalafmt configuration at $path.")
+    new MessageParams(
+      MessageType.Error,
+      s"Unable to read the Scalafmt configuration at $path.",
+    )
 
   object WorkspaceSymbolDependencies {
     def title: String =
