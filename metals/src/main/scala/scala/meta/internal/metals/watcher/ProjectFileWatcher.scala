@@ -28,18 +28,18 @@ import com.swoval.files.PathWatchers
 import com.swoval.files.PathWatchers.Event.Kind
 
 /**
- * Watch selected files and execute  a callback on file events.
+ * Watch selected files and execute a callback on file events.
  *
- * This class recursively watches selected directories and selected files.
- * File events can be further filtered by the `watchFiler` parameter, which can speed by watching for changes
- * by limiting the number of files that need to be hashed.
+ * This class recursively watches selected directories and selected files. File events can be further filtered by the
+ * `watchFiler` parameter, which can speed by watching for changes by limiting the number of files that need to be
+ * hashed.
  *
  * We don't use the LSP dynamic file watcher capability because
  *
- * 1. the glob syntax is not defined in the LSP spec making it difficult to deliver a
- *    consistent file watching experience with all editor clients on all operating systems.
- * 2. we may have a lot of file watching events and it's presumably less overhead to
- *    get the notifications directly from the OS instead of through the editor via LSP.
+ *   1. the glob syntax is not defined in the LSP spec making it difficult to deliver a consistent file watching
+ *      experience with all editor clients on all operating systems. 2. we may have a lot of file watching events and
+ *      it's presumably less overhead to get the notifications directly from the OS instead of through the editor via
+ *      LSP.
  */
 final class ProjectFileWatcher(
     config: MetalsServerConfig,
@@ -99,7 +99,7 @@ object ProjectFileWatcher {
           !buildTargets.checkIfGeneratedSource(path.toNIO)
 
       if (shouldBeWatched) {
-        if (buildTargets.isSourceFile(path))
+        if (path.isFile)
           files.add(path.toNIO)
         else
           directories.add(path.toNIO)
@@ -125,13 +125,18 @@ object ProjectFileWatcher {
    *
    * Contains platform specific file watch initialization logic
    *
-   * @param config metals server configuration
-   * @param workspace current project workspace directory
-   * @param pathsToWatch source files and directories to watch
-   * @param callback to execute on FileWatchEvent
-   * @param watchFilter predicate that filters which files
-   *        generate a FileWatchEvent on create/delete/change
-   * @return a dispose action resources used by file watching
+   * @param config
+   *   metals server configuration
+   * @param workspace
+   *   current project workspace directory
+   * @param pathsToWatch
+   *   source files and directories to watch
+   * @param callback
+   *   to execute on FileWatchEvent
+   * @param watchFilter
+   *   predicate that filters which files generate a FileWatchEvent on create/delete/change
+   * @return
+   *   a dispose action resources used by file watching
    */
   private def startWatch(
       config: MetalsServerConfig,
@@ -143,7 +148,7 @@ object ProjectFileWatcher {
     val watchEventQueue: BlockingQueue[FileWatcherEvent] =
       new LinkedBlockingQueue[FileWatcherEvent]
 
-    val watcher: PathWatcher[PathWatchers.Event] = {
+    val watcher: FileWatcher = {
       if (scala.util.Properties.isMac) {
         // Due to a hard limit on the number of FSEvents streams that can be
         // opened on macOS, only up to 32 longest common prefixes of the files to
@@ -172,16 +177,19 @@ object ProjectFileWatcher {
           watcher.register(root, Int.MaxValue)
         }
 
-        watcher
+        new FileWatcher {
+          override def start(): Unit = {}
+          override def cancel(): Unit = watcher.close
+        }
       } else {
         // Other OSes register all the files and directories individually
-        val watcher = initWatcher(watchFilter, watchEventQueue)
-
-        pathsToWatch.directories.foreach(
-          watcher.register(_, Int.MaxValue)
+        val watcher = new SimpleFileWatcher(
+          watchFilter,
+          watchEventQueue,
+          pathsToWatch.files,
+          pathsToWatch.directories,
         )
-        pathsToWatch.files.foreach(watcher.register(_, -1))
-
+        watcher.start()
         watcher
       }
     }
@@ -209,7 +217,7 @@ object ProjectFileWatcher {
       val closing = Future {
         hanged.set(Thread.currentThread())
         stopWatchingSignal.set(true)
-        watcher.close()
+        watcher.cancel()
         thread.interrupt()
         hanged.set(null)
       }
@@ -225,12 +233,13 @@ object ProjectFileWatcher {
   /**
    * Initialize file watcher
    *
-   * File watch events are put into a queue which is processed separately
-   * to prevent callbacks to be executed on the thread that watches
-   * for file events.
+   * File watch events are put into a queue which is processed separately to prevent callbacks to be executed on the
+   * thread that watches for file events.
    *
-   * @param watchFilter for incoming file watch events
-   * @param queue for file events
+   * @param watchFilter
+   *   for incoming file watch events
+   * @param queue
+   *   for file events
    * @return
    */
   private def initWatcher(
