@@ -1,11 +1,12 @@
 object TestGroups {
 
   /**
-   * The unit test groups contain two sets of classes that should be executed on separate shards
-   * on CI. Best to always add to the shard that executes in less time.
+   * The unit test groups contain two sets of classes that should be executed on separate shards on CI. Best to always
+   * add to the shard that executes in less time.
    */
   val testGroups = List(
-    Set("tests.RenameLspSuite", "tests.ImplementationLspSuite",
+    Set(
+      "tests.RenameLspSuite", "tests.ImplementationLspSuite",
       "tests.worksheets.WorksheetLspSuite",
       "tests.RangeFormattingWhenPastingSuite", "tests.ScalaToplevelSuite",
       "tests.DebugProtocolSuite", "tests.BillLspSuite",
@@ -52,8 +53,11 @@ object TestGroups {
       "tests.RequestRegistrySuite", "tests.inlayHints.InlayHintsExpectSuite",
       "tests.worksheets.WorksheetInfiniteLoopSuite", "tests.TimeoutSuite",
       "tests.SingleFileSuite", "tests.SupportedScalaSuite",
-      "tests.bestEffort.BestEffortCompilationSuite"),
-    Set("tests.AmmoniteSuite", "tests.debug.BreakpointDapSuite",
+      "tests.bestEffort.BestEffortCompilationSuite",
+      "tests.SimpleFileWatcherSuite",
+    ),
+    Set(
+      "tests.AmmoniteSuite", "tests.debug.BreakpointDapSuite",
       "tests.OnTypeFormattingSuite", "tests.ReferenceLspSuite",
       "tests.SuperMethodLspSuite", "tests.SyntaxErrorLspSuite",
       "tests.codeactions.StringActionsLspSuite", "tests.RangeFormattingSuite",
@@ -122,6 +126,7 @@ object TestGroups {
       "tests.decorations.SyntheticDecorationsExpectSuite",
       "tests.codeactions.ConvertSingleLineCommentLspSuite",
       "tests.ServerLivenessMonitorSuite", "tests.ResetWorkspaceLspSuite",
-      "tests.ToplevelWithInnerScala3Suite", "tests.OutlineLspSuite"),
+      "tests.ToplevelWithInnerScala3Suite", "tests.OutlineLspSuite",
+    ),
   )
 }
