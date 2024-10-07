@@ -263,7 +263,9 @@ final class Compilations(
     params.setOriginId(originId)
 
     val arguments = (
-      if (userConfiguration().verboseCompilation && (connection.isBloop || connection.isScalaCLI)) {
+      if (
+        userConfiguration().verboseCompilation && (connection.isBloop || connection.isScalaCLI)
+      ) {
         List("--verbose", "--best-effort")
       } else {
         List.empty

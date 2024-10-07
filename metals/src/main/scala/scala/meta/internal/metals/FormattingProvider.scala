@@ -407,15 +407,16 @@ final class FormattingProvider(
   def validateWorkspace(projectRoot: AbsolutePath): Future[Unit] = (
     for {
       conf <- scalafmtConf(projectRoot)
-      text <- try {
-        Some(conf.toInputFromBuffers(buffers).text)
-      } catch {
-        // The exceptions thrown by `Files.readAllBytes`, which we use under the hood
-        case _: IOException | _: SecurityException =>
-          client.showMessage(Messages.UnableToReadScalafmtConf(conf))
+      text <-
+        try {
+          Some(conf.toInputFromBuffers(buffers).text)
+        } catch {
+          // The exceptions thrown by `Files.readAllBytes`, which we use under the hood
+          case _: IOException | _: SecurityException =>
+            client.showMessage(Messages.UnableToReadScalafmtConf(conf))
 
-          None
-      }
+            None
+        }
 
       result <- ScalafmtConfig.parse(text) match {
         case Failure(e) =>
