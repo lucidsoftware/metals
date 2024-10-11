@@ -67,21 +67,13 @@ import org.eclipse.{lsp4j => l}
 /**
  * One stop shop for all extension methods that are used in the metals build.
  *
- * Usage: {{{
- *   import scala.meta.internal.metals.MetalsEnrichments._
- *   List(1).asJava
- *   Future(1).asJava
- *   // ...
- * }}}
+ * Usage: {{{import scala.meta.internal.metals.MetalsEnrichments._ List(1).asJava Future(1).asJava // ...}}}
  *
- * Includes the following converters from the standard library: {{{
- *  import scala.compat.java8.FutureConverters._
- *  import scala.meta.internal.jdk.CollectionConverters._
- * }}}
+ * Includes the following converters from the standard library: {{{ import scala.compat.java8.FutureConverters._ import
+ * scala.meta.internal.jdk.CollectionConverters._ }}}
  *
- * If this doesn't scale because we have too many unrelated extension methods
- * then we can split this up, but for now it's really convenient to have to
- * remember only one import.
+ * If this doesn't scale because we have too many unrelated extension methods then we can split this up, but for now
+ * it's really convenient to have to remember only one import.
  */
 object MetalsEnrichments
     extends AsJavaExtensions
@@ -586,8 +578,7 @@ object MetalsEnrichments
     }
 
     /**
-     * Bazelbsp provides us with a path to a jar.
-     * SemanticDB files are store in the same directory as the jar file.
+     * Bazelbsp provides us with a path to a jar. SemanticDB files are store in the same directory as the jar file.
      *
      * Example: `/path/hello.jar -> /path/_semanticdb/hello`
      */
@@ -854,9 +845,8 @@ object MetalsEnrichments
     }
 
     /**
-     * Useful for decoded the diagnostic data since there are overlapping
-     * unrequired keys in the structure that causes issues when we try to
-     * deserialize the old top level text edit vs the newly nested actions.
+     * Useful for decoded the diagnostic data since there are overlapping unrequired keys in the structure that causes
+     * issues when we try to deserialize the old top level text edit vs the newly nested actions.
      */
     object DiagnosticDataDeserializer
         extends JsonDeserializer[Either[l.TextEdit, b.ScalaDiagnostic]] {
@@ -889,8 +879,13 @@ object MetalsEnrichments
   }
 
   implicit class XtensionSeverityBsp(sev: b.DiagnosticSeverity) {
-    def toLsp: l.DiagnosticSeverity =
-      l.DiagnosticSeverity.forValue(sev.getValue)
+    def toLsp: l.DiagnosticSeverity = {
+      try {
+        l.DiagnosticSeverity.forValue(sev.getValue)
+      } catch {
+        case _: NullPointerException => l.DiagnosticSeverity.Error
+      }
+    }
   }
 
   implicit class XtensionPositionBSp(pos: b.Position) {
@@ -1260,8 +1255,7 @@ object MetalsEnrichments
   implicit class XtensionTreeBraceHandler(stat: Tree) {
 
     /**
-     * Check if it's possible to use braceless syntax and whether
-     * it's the preferred style in the file.
+     * Check if it's possible to use braceless syntax and whether it's the preferred style in the file.
      */
     def canUseBracelessSyntax(source: String): Boolean = {
 
@@ -1368,9 +1362,8 @@ object MetalsEnrichments
   }
 
   /**
-   * Strips ANSI colors.
-   * As long as the color codes are valid this should correctly strip
-   * anything that is ESC (U+001B) plus [
+   * Strips ANSI colors. As long as the color codes are valid this should correctly strip anything that is ESC (U+001B)
+   * plus [
    */
   def filterANSIColorCodes(str: String): String =
     str.replaceAll("\u001b\\[1A\u001b\\[K|\u001B\\[[;\\d]*m", "")
