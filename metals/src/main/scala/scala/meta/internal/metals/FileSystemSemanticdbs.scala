@@ -16,24 +16,29 @@ import scala.meta.io.RelativePath
  * Reads SemanticDBs from disk that are produces by the semanticdb-scalac compiler plugin.
  */
 final class FileSystemSemanticdbs(
-    buildTargets: BuildTargets,
-    charset: Charset,
-    mainWorkspace: AbsolutePath,
-    fingerprints: Md5Fingerprints,
-    scalaCliServers: => ScalaCliServers,
+  buildTargets: BuildTargets,
+  charset: Charset,
+  mainWorkspace: AbsolutePath,
+  fingerprints: Md5Fingerprints,
+  scalaCliServers: => ScalaCliServers,
 ) extends Semanticdbs {
 
   override def textDocument(file: AbsolutePath): TextDocumentLookup = {
+    // returning a NotFound text document, targetroot looks like it's slightly off
+    //
     if (
       (!file.toLanguage.isScala && !file.toLanguage.isJava) ||
       file.toNIO.getFileSystem != mainWorkspace.toNIO.getFileSystem ||
       scalaCliServers.loadedExactly(
-        file
+        file,
       ) // scala-cli single files, interactive is used for those
     ) {
+      scribe.info("RFERGUSON notFound1")
       TextDocumentLookup.NotFound(file)
     } else {
 
+      val buildTarget = buildTargets.inverseSources(file)
+      scribe.info(s"RFERGUSON targetRoots     ${buildTarget.map(buildTargets.scalaTargetRoots)}")
       val paths = for {
         buildTarget <- buildTargets.inverseSources(file)
         workspace <- buildTargets.workspaceDirectory(buildTarget)
@@ -46,7 +51,8 @@ final class FileSystemSemanticdbs(
         }
       } yield {
         if (!targetroot.exists)
-          scribe.debug(s"Target root $targetroot does not exist")
+          // just remove RFERGUSON here
+          scribe.debug(s"RFERGUSON Target root $targetroot does not exist")
         val optScalaVersion =
           if (file.toLanguage.isJava) None
           else buildTargets.scalaTarget(buildTarget).map(_.scalaVersion)
@@ -55,28 +61,32 @@ final class FileSystemSemanticdbs(
       }
 
       paths match {
-        case Some((ws, targetroot, optScalaVersion)) =>
-          Semanticdbs.loadTextDocument(
+        case Some((ws, targetroot, optScalaVersion)) => {
+          val res = Semanticdbs.loadTextDocument(
             file,
             ws,
             optScalaVersion,
             charset,
             fingerprints,
-            semanticdbRelativePath =>
-              findSemanticDb(semanticdbRelativePath, targetroot, file, ws),
-            (warn: String) => scribe.warn(warn),
+            semanticdbRelativePath => findSemanticDb(semanticdbRelativePath, targetroot, file, ws),
+            (warn: String) => scribe.warn(s"RFERGUSON warning: $warn"),
           )
-        case None =>
+          scribe.info(s"RFERGUSON found doc? $res")
+          res
+        }
+        case None => {
+          scribe.info("RFERGUSON notFound2")
           TextDocumentLookup.NotFound(file)
+        }
       }
     }
   }
 
   def findSemanticDb(
-      semanticdbRelativePath: RelativePath,
-      targetroot: AbsolutePath,
-      file: AbsolutePath,
-      workspace: AbsolutePath,
+    semanticdbRelativePath: RelativePath,
+    targetroot: AbsolutePath,
+    file: AbsolutePath,
+    workspace: AbsolutePath,
   ): Option[FoundSemanticDbPath] = {
     val semanticdbpath = targetroot.resolve(semanticdbRelativePath)
     if (semanticdbpath.isFile) Some(FoundSemanticDbPath(semanticdbpath, None))
@@ -88,10 +98,10 @@ final class FileSystemSemanticdbs(
         relativeFile = file.toRelative(sourceRoot.dealias)
         fullRelativePath = relativeSourceRoot.resolve(relativeFile)
         alternativeRelativePath = SemanticdbClasspath.fromScalaOrJava(
-          fullRelativePath
+          fullRelativePath,
         )
         alternativeSemanticdbPath = targetroot.resolve(
-          alternativeRelativePath
+          alternativeRelativePath,
         )
         if alternativeSemanticdbPath.isFile
       } yield FoundSemanticDbPath(
@@ -99,8 +109,8 @@ final class FileSystemSemanticdbs(
         Some(fullRelativePath),
       )
       if (result.isEmpty)
-        scribe.debug(
-          s"No text document found at for $file expected at ${semanticdbpath}"
+        scribe.info(
+          s"No text document found at for $file expected at ${semanticdbpath}",
         )
       result
     }

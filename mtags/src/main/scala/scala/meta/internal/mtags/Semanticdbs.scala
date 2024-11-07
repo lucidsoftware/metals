@@ -27,13 +27,13 @@ object Semanticdbs {
   }
 
   def loadTextDocument(
-      scalaOrJavaPath: AbsolutePath,
-      sourceroot: AbsolutePath,
-      optScalaVersion: Option[String],
-      charset: Charset,
-      fingerprints: Md5Fingerprints,
-      loader: RelativePath => Option[FoundSemanticDbPath],
-      log: String => Unit = (_) => ()
+    scalaOrJavaPath: AbsolutePath,
+    sourceroot: AbsolutePath,
+    optScalaVersion: Option[String],
+    charset: Charset,
+    fingerprints: Md5Fingerprints,
+    loader: RelativePath => Option[FoundSemanticDbPath],
+    log: String => Unit = _ => (),
   ): TextDocumentLookup = {
     if (scalaOrJavaPath.toNIO.getFileSystem != sourceroot.toNIO.getFileSystem) {
       TextDocumentLookup.NotFound(scalaOrJavaPath)
@@ -41,6 +41,7 @@ object Semanticdbs {
       val scalaRelativePath = scalaOrJavaPath.toRelative(sourceroot.dealias)
       val semanticdbRelativePath =
         SemanticdbClasspath.fromScalaOrJava(scalaRelativePath)
+      log(s"found path $scalaRelativePath ${loader(semanticdbRelativePath)}")
       loader(semanticdbRelativePath) match {
         case None =>
           TextDocumentLookup.NotFound(scalaOrJavaPath)
@@ -52,20 +53,20 @@ object Semanticdbs {
             optScalaVersion,
             charset,
             fingerprints,
-            log
+            log,
           )
       }
     }
   }
 
   private def loadResolvedTextDocument(
-      scalaPath: AbsolutePath,
-      scalaRelativePath: RelativePath,
-      semanticdbPath: AbsolutePath,
-      optScalaVersion: Option[String],
-      charset: Charset,
-      fingerprints: Md5Fingerprints,
-      log: String => Unit
+    scalaPath: AbsolutePath,
+    scalaRelativePath: RelativePath,
+    semanticdbPath: AbsolutePath,
+    optScalaVersion: Option[String],
+    charset: Charset,
+    fingerprints: Md5Fingerprints,
+    log: String => Unit,
   ): TextDocumentLookup = {
     val reluri = scalaRelativePath.toURI(false).toString
     val sdocs = loadTextDocuments(semanticdbPath)
@@ -80,7 +81,7 @@ object Semanticdbs {
               sdoc,
               Shebang.adjustContent(text),
               fingerprints,
-              log
+              log,
             )
           else TextDocumentLookup.NotFound(scalaPath)
         } else
@@ -90,11 +91,11 @@ object Semanticdbs {
   }
 
   private def addIfStaleInfo(
-      scalaPath: AbsolutePath,
-      sdoc: s.TextDocument,
-      currentText: String,
-      fingerprints: Md5Fingerprints,
-      log: String => Unit
+    scalaPath: AbsolutePath,
+    sdoc: s.TextDocument,
+    currentText: String,
+    fingerprints: Md5Fingerprints,
+    log: String => Unit,
   ) = {
     val md5 = MD5.compute(currentText)
     val sdocMd5 = sdoc.md5.toUpperCase()
@@ -124,7 +125,7 @@ object Semanticdbs {
         range.startLine,
         range.startCharacter,
         range.endLine,
-        range.endCharacter
+        range.endCharacter,
       )
       sb.append(doc.text.substring(offset, pos.end))
       val isPrimaryConstructor =
@@ -146,8 +147,8 @@ object Semanticdbs {
   }
 
   case class FoundSemanticDbPath(
-      path: AbsolutePath,
-      nonDefaultRelPath: Option[RelativePath]
+    path: AbsolutePath,
+    nonDefaultRelPath: Option[RelativePath],
   )
 }
 
@@ -156,10 +157,9 @@ object Shebang {
   private val sheBangRegex: Regex = s"""(^(#!.*(\\r\\n?|\\n)?)+(\\s*!#.*)?)""".r
 
   /**
-   * This function adjusts file content changing all not-newline characters
-   * in the shebang header into spaces.
-   * This is the same as done in the Scala 3 compiler, so for the same input,
-   * m5d from semanticdb and the one calculated from adjusted content will match.
+   * This function adjusts file content changing all not-newline characters in the shebang header into spaces. This is
+   * the same as done in the Scala 3 compiler, so for the same input, m5d from semanticdb and the one calculated from
+   * adjusted content will match.
    */
   def adjustContent(content: String): String = {
     val regexMatch = sheBangRegex.findFirstMatchIn(content)

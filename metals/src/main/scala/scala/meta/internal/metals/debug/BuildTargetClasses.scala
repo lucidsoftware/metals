@@ -100,7 +100,17 @@ final class BuildTargetClasses(val buildTargets: BuildTargets)(implicit
           val updateTestClasses =
             connection
               .testClasses(new b.ScalaTestClassesParams(targetsList))
-              .map(cacheTestClasses(classes, _))
+              .map { klasses =>
+                cacheTestClasses(classes, klasses)
+              }
+          // this would also possibly work if bazel-bsp complied with the spec.
+          // I don't know how to make it do that though
+          // val updateTestClasses =
+          //  connection
+          //    .jvmTestEnvironment(new b.JvmTestEnvironmentParams(targetsList))
+          //    .map { klasses =>
+          //      cacheTestClasses(classes, klasses)
+          //    }
 
           for {
             _ <- updateMainClasses

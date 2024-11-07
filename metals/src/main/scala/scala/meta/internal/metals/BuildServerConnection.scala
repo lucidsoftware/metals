@@ -305,6 +305,30 @@ class BuildServerConnection private (
     }
   }
 
+  def jvmTestEnvironment(
+      params: JvmTestEnvironmentParams
+  ): Future[JvmTestEnvironmentResult] = {
+    def empty = new JvmTestEnvironmentResult(Collections.emptyList)
+    connection.flatMap { conn =>
+      if (conn.capabilities.getJvmTestEnvironmentProvider()) {
+        register(
+          server => server.buildTargetJvmTestEnvironment(params),
+          onFail = Some(
+            (
+              empty,
+              s"${name} should support `buildTarget/jvmTestEnvironment`, but it fails.",
+            )
+          ),
+        ).asScala
+      } else {
+        scribe.warn(
+          s"${conn.displayName} does not support `buildTarget/jvmTestEnvironment`, unable to fetch run environment."
+        )
+        Future.successful(empty)
+      }
+    }
+  }
+
   def workspaceBuildTargets(): Future[WorkspaceBuildTargetsResult] = {
     register(server => server.workspaceBuildTargets()).asScala
   }
@@ -551,9 +575,9 @@ class BuildServerConnection private (
             .map { case (defaultResult, _) =>
               Future.successful(defaultResult)
             }
-            .getOrElse({
+            .getOrElse {
               Future.failed(new MetalsBspException(name, t))
-            })
+            }
       }
 
     CancelTokens.future { token =>
@@ -572,11 +596,11 @@ object BuildServerConnection {
   /**
    * Establishes a new build server connection with the given input/output streams.
    *
-   * This method is blocking, doesn't return Future[], because if the `initialize` handshake
-   * doesn't complete within a few seconds then something is wrong. We want to fail fast
-   * when initialization is not successful.
+   * This method is blocking, doesn't return Future[], because if the `initialize` handshake doesn't complete within a
+   * few seconds then something is wrong. We want to fail fast when initialization is not successful.
    *
-   * @param bspTraceRoot we look for  `bspTraceRoot/.metals/.bsp.trace.json` to write down bsp trace
+   * @param bspTraceRoot
+   *   we look for `bspTraceRoot/.metals/.bsp.trace.json` to write down bsp trace
    */
   def fromSockets(
       projectRoot: AbsolutePath,
@@ -778,16 +802,13 @@ object BuildServerConnection {
     /**
      * Whether we can call buildTargetWrappedSources through the BSP connection.
      *
-     * As much as possible, we try to call buildTargetWrappedSources through BSP only when we know
-     * the build server supports it. Theoretically, we could try to call it, and catch the JSONRPC
-     * error saying that endpoint isn't supported, but some build servers (sbt) don't respond
-     * with an error in such a case, but rather… don't answer, and let the client timeout. Which
-     * makes sbt BSP support unusable here.
-     * We could also add a dedicated field for it in BuildServerCapabilities, but that requires
-     * updating the build server protocol itself, which I'd rather avoid at this point, as this
-     * feature is somewhat experimental.
-     * The only "dynamic" way I could find to advertize that capability is via a language ids
-     * field, so that's what we use here, with that "scala-sc" language.
+     * As much as possible, we try to call buildTargetWrappedSources through BSP only when we know the build server
+     * supports it. Theoretically, we could try to call it, and catch the JSONRPC error saying that endpoint isn't
+     * supported, but some build servers (sbt) don't respond with an error in such a case, but rather… don't answer, and
+     * let the client timeout. Which makes sbt BSP support unusable here. We could also add a dedicated field for it in
+     * BuildServerCapabilities, but that requires updating the build server protocol itself, which I'd rather avoid at
+     * this point, as this feature is somewhat experimental. The only "dynamic" way I could find to advertize that
+     * capability is via a language ids field, so that's what we use here, with that "scala-sc" language.
      */
     def supportsWrappedSources: Boolean =
       capabilities.getCompileProvider.getLanguageIds.asScala

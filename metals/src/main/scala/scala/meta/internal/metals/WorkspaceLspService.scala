@@ -97,13 +97,13 @@ import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages
 
 class WorkspaceLspService(
-    ec: ExecutionContextExecutorService,
-    sh: ju.concurrent.ScheduledExecutorService,
-    serverInputs: MetalsServerInputs,
-    client: MetalsLanguageClient,
-    initializeParams: lsp4j.InitializeParams,
-    val folders: List[Folder],
-    fallbackServicePath: => AbsolutePath,
+  ec: ExecutionContextExecutorService,
+  sh: ju.concurrent.ScheduledExecutorService,
+  serverInputs: MetalsServerInputs,
+  client: MetalsLanguageClient,
+  initializeParams: lsp4j.InitializeParams,
+  val folders: List[Folder],
+  fallbackServicePath: => AbsolutePath,
 ) extends ScalaLspService {
   import serverInputs._
   implicit val ex: ExecutionContextExecutorService = ec
@@ -272,8 +272,8 @@ class WorkspaceLspService(
   }
 
   def getFolderForOpt[T <: Folder](
-      path: AbsolutePath,
-      folders: List[T],
+    path: AbsolutePath,
+    folders: List[T],
   ): Option[T] =
     try {
       for {
@@ -320,15 +320,17 @@ class WorkspaceLspService(
     focusedDocument.flatMap(getServiceForOpt)
 
   /**
-   * Execute on current folder (for focused document).
-   * In no focused document create a popup for user to choose the folder.
-   * @param f -- action to be executed
-   * @param actionName -- action name to display for popup
+   * Execute on current folder (for focused document). In no focused document create a popup for user to choose the
+   * folder.
+   * @param f
+   *   -- action to be executed
+   * @param actionName
+   *   -- action name to display for popup
    */
   def onCurrentFolder[A](
-      f: ProjectMetalsLspService => Future[A],
-      actionName: String,
-      default: () => A,
+    f: ProjectMetalsLspService => Future[A],
+    actionName: String,
+    default: () => A,
   ): Future[A] = {
     def currentService(): Future[Option[ProjectMetalsLspService]] =
       folderServices match {
@@ -354,14 +356,14 @@ class WorkspaceLspService(
   }
 
   def onCurrentFolder(
-      f: ProjectMetalsLspService => Future[Unit],
-      actionName: String,
+    f: ProjectMetalsLspService => Future[Unit],
+    actionName: String,
   ): Future[Unit] =
     onCurrentFolder(f, actionName, () => ())
 
   def foreachSeq[A](
-      f: ProjectMetalsLspService => Future[A],
-      ignoreValue: Boolean = false,
+    f: ProjectMetalsLspService => Future[A],
+    ignoreValue: Boolean = false,
   ): CompletableFuture[Object] = {
     val res = Future.sequence(folderServices.map(f))
     if (ignoreValue) res.ignoreValue.asJavaObject
@@ -369,8 +371,8 @@ class WorkspaceLspService(
   }
 
   def foreachSeqIncludeFallback[A](
-      f: MetalsLspService => Future[A],
-      ignoreValue: Boolean = false,
+    f: MetalsLspService => Future[A],
+    ignoreValue: Boolean = false,
   ): CompletableFuture[Object] = {
     val services = folderServices ++ optFallback
     val res = Future.sequence(services.map(f))
@@ -379,12 +381,12 @@ class WorkspaceLspService(
   }
 
   def collectSeq[A, B](f: MetalsLspService => Future[A])(
-      compose: List[A] => B
+    compose: List[A] => B,
   ): Future[B] =
     Future.sequence(folderServices.map(f)).collect { case v => compose(v) }
 
   override def didOpen(
-      params: DidOpenTextDocumentParams
+    params: DidOpenTextDocumentParams,
   ): CompletableFuture[Unit] = {
     focusedDocument.foreach(recentlyFocusedFiles.add)
     val uri = params.getTextDocument.getUri
@@ -402,7 +404,7 @@ class WorkspaceLspService(
   }
 
   override def didChange(
-      params: DidChangeTextDocumentParams
+    params: DidChangeTextDocumentParams,
   ): CompletableFuture[Unit] =
     getServiceFor(params.getTextDocument().getUri()).didChange(params)
 
@@ -415,22 +417,22 @@ class WorkspaceLspService(
   }
 
   override def didSave(
-      params: DidSaveTextDocumentParams
+    params: DidSaveTextDocumentParams,
   ): CompletableFuture[Unit] =
     getServiceFor(params.getTextDocument().getUri()).didSave(params)
 
   override def definition(
-      position: TextDocumentPositionParams
+    position: TextDocumentPositionParams,
   ): CompletableFuture[ju.List[Location]] =
     getServiceFor(position.getTextDocument().getUri()).definition(position)
 
   override def typeDefinition(
-      position: TextDocumentPositionParams
+    position: TextDocumentPositionParams,
   ): CompletableFuture[ju.List[Location]] =
     getServiceFor(position.getTextDocument().getUri()).typeDefinition(position)
 
   override def implementation(
-      position: TextDocumentPositionParams
+    position: TextDocumentPositionParams,
   ): CompletableFuture[ju.List[Location]] =
     getServiceFor(position.getTextDocument().getUri()).implementation(position)
 
@@ -438,44 +440,44 @@ class WorkspaceLspService(
     getServiceFor(params.textDocument.getUri()).hover(params)
 
   override def inlayHints(
-      params: lsp4j.InlayHintParams
+    params: lsp4j.InlayHintParams,
   ): CompletableFuture[java.util.List[lsp4j.InlayHint]] =
     getServiceFor(params.getTextDocument.getUri()).inlayHints(params)
 
   override def inlayHintResolve(
-      inlayHint: lsp4j.InlayHint
+    inlayHint: lsp4j.InlayHint,
   ): CompletableFuture[lsp4j.InlayHint] =
     currentFolder
       .map(_.inlayHintResolve(inlayHint))
       .getOrElse(Future.successful(inlayHint).asJava)
 
   override def documentHighlights(
-      params: TextDocumentPositionParams
+    params: TextDocumentPositionParams,
   ): CompletableFuture[ju.List[DocumentHighlight]] =
     getServiceFor(params.getTextDocument.getUri()).documentHighlights(params)
 
   override def documentSymbol(params: DocumentSymbolParams): CompletableFuture[
-    messages.Either[ju.List[DocumentSymbol], ju.List[SymbolInformation]]
+    messages.Either[ju.List[DocumentSymbol], ju.List[SymbolInformation]],
   ] =
     getServiceFor(params.getTextDocument.getUri()).documentSymbol(params)
 
   override def formatting(
-      params: DocumentFormattingParams
+    params: DocumentFormattingParams,
   ): CompletableFuture[ju.List[TextEdit]] =
     getServiceFor(params.getTextDocument.getUri()).formatting(params)
 
   override def onTypeFormatting(
-      params: DocumentOnTypeFormattingParams
+    params: DocumentOnTypeFormattingParams,
   ): CompletableFuture[ju.List[TextEdit]] =
     getServiceFor(params.getTextDocument.getUri()).onTypeFormatting(params)
 
   override def rangeFormatting(
-      params: DocumentRangeFormattingParams
+    params: DocumentRangeFormattingParams,
   ): CompletableFuture[ju.List[TextEdit]] =
     getServiceFor(params.getTextDocument.getUri()).rangeFormatting(params)
 
   override def prepareRename(
-      params: TextDocumentPositionParams
+    params: TextDocumentPositionParams,
   ): CompletableFuture[lsp4j.Range] =
     getServiceFor(params.getTextDocument.getUri()).prepareRename(params)
 
@@ -483,76 +485,76 @@ class WorkspaceLspService(
     getServiceFor(params.getTextDocument.getUri()).rename(params)
 
   override def references(
-      params: ReferenceParams
+    params: ReferenceParams,
   ): CompletableFuture[ju.List[Location]] =
     getServiceFor(params.getTextDocument.getUri()).references(params)
 
   override def prepareCallHierarchy(
-      params: CallHierarchyPrepareParams
+    params: CallHierarchyPrepareParams,
   ): CompletableFuture[ju.List[CallHierarchyItem]] =
     getServiceFor(params.getTextDocument.getUri()).prepareCallHierarchy(params)
 
   override def callHierarchyIncomingCalls(
-      params: CallHierarchyIncomingCallsParams
+    params: CallHierarchyIncomingCallsParams,
   ): CompletableFuture[ju.List[CallHierarchyIncomingCall]] =
     getServiceFor(params.getItem.getUri).callHierarchyIncomingCalls(params)
 
   override def callHierarchyOutgoingCalls(
-      params: CallHierarchyOutgoingCallsParams
+    params: CallHierarchyOutgoingCallsParams,
   ): CompletableFuture[ju.List[CallHierarchyOutgoingCall]] =
     getServiceFor(params.getItem.getUri).callHierarchyOutgoingCalls(params)
 
   override def completion(
-      params: CompletionParams
+    params: CompletionParams,
   ): CompletableFuture[CompletionList] =
     getServiceFor(params.getTextDocument.getUri).completion(params)
 
   override def completionItemResolve(
-      item: CompletionItem
+    item: CompletionItem,
   ): CompletableFuture[CompletionItem] =
     currentFolder
       .map(_.completionItemResolve(item))
       .getOrElse(Future.successful(item).asJava)
 
   override def signatureHelp(
-      params: TextDocumentPositionParams
+    params: TextDocumentPositionParams,
   ): CompletableFuture[SignatureHelp] =
     getServiceFor(params.getTextDocument.getUri).signatureHelp(params)
 
   override def codeAction(
-      params: CodeActionParams
+    params: CodeActionParams,
   ): CompletableFuture[ju.List[CodeAction]] =
     getServiceFor(params.getTextDocument.getUri).codeAction(params)
 
   override def codeLens(
-      params: CodeLensParams
+    params: CodeLensParams,
   ): CompletableFuture[ju.List[CodeLens]] =
     getServiceFor(params.getTextDocument.getUri).codeLens(params)
 
   override def foldingRange(
-      params: FoldingRangeRequestParams
+    params: FoldingRangeRequestParams,
   ): CompletableFuture[ju.List[FoldingRange]] =
     getServiceFor(params.getTextDocument.getUri).foldingRange(params)
 
   override def selectionRange(
-      params: SelectionRangeParams
+    params: SelectionRangeParams,
   ): CompletableFuture[ju.List[SelectionRange]] =
     getServiceFor(params.getTextDocument.getUri).selectionRange(params)
 
   override def semanticTokensFull(
-      params: SemanticTokensParams
+    params: SemanticTokensParams,
   ): CompletableFuture[SemanticTokens] =
     getServiceFor(params.getTextDocument.getUri).semanticTokensFull(params)
 
   override def workspaceSymbol(
-      params: WorkspaceSymbolParams
+    params: WorkspaceSymbolParams,
   ): CompletableFuture[ju.List[lsp4j.SymbolInformation]] =
     CancelTokens.future { token =>
       collectSeq(_.workspaceSymbol(params, token))(_.flatten.asJava)
     }
 
   override def willRenameFiles(
-      params: RenameFilesParams
+    params: RenameFilesParams,
   ): CompletableFuture[WorkspaceEdit] =
     CancelTokens.future { _ =>
       val moves = params.getFiles.asScala.toSeq.map { rename =>
@@ -566,19 +568,19 @@ class WorkspaceLspService(
           service.willRenameFile(oldPath, newPath)
         else
           Future.successful(
-            new WorkspaceEdit(Map.empty[String, ju.List[TextEdit]].asJava)
+            new WorkspaceEdit(Map.empty[String, ju.List[TextEdit]].asJava),
           )
       }
       Future.sequence(moves).map(_.mergeChanges)
     }
 
   override def didChangeConfiguration(
-      params: DidChangeConfigurationParams
+    params: DidChangeConfigurationParams,
   ): CompletableFuture[Unit] =
     userConfigSync.onDidChangeConfiguration(params, folderServices).asJava
 
   override def didChangeWatchedFiles(
-      params: DidChangeWatchedFilesParams
+    params: DidChangeWatchedFilesParams,
   ): CompletableFuture[Unit] =
     Future
       .sequence(
@@ -593,13 +595,13 @@ class WorkspaceLspService(
           .groupBy(_._2)
           .map { case (service, paths) =>
             service.didChangeWatchedFiles(paths.map(_._1))
-          }
+          },
       )
       .ignoreValue
       .asJava
 
   override def didChangeWorkspaceFolders(
-      params: lsp4j.DidChangeWorkspaceFoldersParams
+    params: lsp4j.DidChangeWorkspaceFoldersParams,
   ): CompletableFuture[Unit] = {
     val removed =
       params
@@ -622,7 +624,7 @@ class WorkspaceLspService(
   }
 
   override def treeViewChildren(
-      params: TreeViewChildrenParams
+    params: TreeViewChildrenParams,
   ): CompletableFuture[MetalsTreeViewChildrenResult] = {
     Future {
       treeView.children(params)
@@ -630,7 +632,7 @@ class WorkspaceLspService(
   }
 
   override def treeViewParent(
-      params: TreeViewParentParams
+    params: TreeViewParentParams,
   ): CompletableFuture[TreeViewParentResult] = {
     Future {
       treeView.parent(params)
@@ -638,21 +640,21 @@ class WorkspaceLspService(
   }
 
   override def treeViewVisibilityDidChange(
-      params: TreeViewVisibilityDidChangeParams
+    params: TreeViewVisibilityDidChangeParams,
   ): CompletableFuture[Unit] =
     Future {
       treeView.onVisibilityDidChange(params)
     }.asJava
 
   override def treeViewNodeCollapseDidChange(
-      params: TreeViewNodeCollapseDidChangeParams
+    params: TreeViewNodeCollapseDidChangeParams,
   ): CompletableFuture[Unit] =
     Future {
       treeView.onCollapseDidChange(params)
     }.asJava
 
   override def treeViewReveal(
-      params: TextDocumentPositionParams
+    params: TextDocumentPositionParams,
   ): CompletableFuture[TreeViewNodeRevealResult] =
     Future {
       treeView
@@ -664,23 +666,23 @@ class WorkspaceLspService(
     }.asJava
 
   override def findTextInDependencyJars(
-      params: FindTextInDependencyJarsRequest
+    params: FindTextInDependencyJarsRequest,
   ): CompletableFuture[ju.List[Location]] =
     collectSeq(_.findTextInDependencyJars(params))(_.flatten.asJava).asJava
 
   override def didCancelWorkDoneProgress(
-      params: lsp4j.WorkDoneProgressCancelParams
+    params: lsp4j.WorkDoneProgressCancelParams,
   ): Unit = workDoneProgress.canceled(params.getToken())
 
   def doctorVisibilityDidChange(
-      params: DoctorVisibilityDidChangeParams
+    params: DoctorVisibilityDidChangeParams,
   ): CompletableFuture[Unit] =
     Future {
       doctor.onVisibilityDidChange(params.visible)
     }.asJava
 
   override def didFocus(
-      params: AnyRef
+    params: AnyRef,
   ): CompletableFuture[DidFocusResult.Value] = {
     val uriOpt: Option[String] = params match {
       case string: String =>
@@ -689,7 +691,7 @@ class WorkspaceLspService(
         Option(h)
       case _ =>
         scribe.warn(
-          s"Unexpected notification params received for didFocusTextDocument: $params"
+          s"Unexpected notification params received for didFocusTextDocument: $params",
         )
         None
     }
@@ -710,7 +712,7 @@ class WorkspaceLspService(
     }
 
   private def failedRequest(
-      message: String
+    message: String,
   ): Future[Object] = {
     Future
       .failed(
@@ -719,17 +721,17 @@ class WorkspaceLspService(
             messages.ResponseErrorCode.InvalidParams,
             message,
             null,
-          )
-        )
+          ),
+        ),
       )
   }
 
   private def onFirstSatifying[T, R](
-      mapTo: MetalsLspService => Future[T]
+    mapTo: MetalsLspService => Future[T],
   )(
-      satisfies: T => Boolean,
-      exec: (MetalsLspService, T) => Future[R],
-      onNotFound: () => Future[R],
+    satisfies: T => Boolean,
+    exec: (MetalsLspService, T) => Future[R],
+    onNotFound: () => Future[R],
   ): Future[R] =
     Future
       .sequence(folderServices.map(service => mapTo(service).map((service, _))))
@@ -747,7 +749,7 @@ class WorkspaceLspService(
       .flatMap(_.map(exec.tupled).getOrElse(onNotFound()))
 
   override def executeCommand(
-      params: ExecuteCommandParams
+    params: ExecuteCommandParams,
   ): CompletableFuture[Object] =
     params match {
       case ServerCommands.ScanWorkspaceSources() =>
@@ -808,8 +810,8 @@ class WorkspaceLspService(
                 mains.headOption.fold(
                   Future.failed[DebugSessionParams](
                     DiscoveryFailures
-                      .NoMainClassFoundException(unresolvedParams.mainClass)
-                  )
+                      .NoMainClassFoundException(unresolvedParams.mainClass),
+                  ),
                 )(Future.successful(_))
               }
 
@@ -852,8 +854,8 @@ class WorkspaceLspService(
               ClientCommands.WindowLocation(
                 location.getUri(),
                 location.getRange(),
-              )
-            )
+              ),
+            ),
           )
         }.asJavaObject
       case ServerCommands.ListBuildTargets() =>
@@ -862,7 +864,7 @@ class WorkspaceLspService(
             .flatMap(
               _.buildTargets.all.toList
                 .map(_.getDisplayName())
-                .sorted
+                .sorted,
             )
             .asJava
         }.asJavaObject
@@ -898,8 +900,8 @@ class WorkspaceLspService(
               ClientCommands.WindowLocation(
                 location.getUri(),
                 location.getRange(),
-              )
-            )
+              ),
+            ),
           )
         }.asJavaObject
 
@@ -916,8 +918,8 @@ class WorkspaceLspService(
                 ClientCommands.WindowLocation(
                   location.getUri(),
                   location.getRange(),
-                )
-              )
+                ),
+              ),
             )
           }
         }.asJavaObject
@@ -937,8 +939,8 @@ class WorkspaceLspService(
                   ClientCommands.WindowLocation(
                     location.getUri(),
                     location.getRange(),
-                  )
-                )
+                  ),
+                ),
               )
             },
           ServerCommands.GotoLog.title,
@@ -951,54 +953,48 @@ class WorkspaceLspService(
           .orElse {
             Option.when(
               fallbackIsInitialized.get() && targets
-                .forall(fallbackService.supportsBuildTarget(_).isDefined)
+                .forall(fallbackService.supportsBuildTarget(_).isDefined),
             )(fallbackService)
           } match {
           case Some(service) =>
             service.startDebugProvider(params).liftToLspError.asJavaObject
           case None =>
             failedRequest(
-              s"Could not find folder for build targets: ${targets.mkString(",")}"
+              s"Could not find folder for build targets: ${targets.mkString(",")}",
             ).asJavaObject
         }
       case ServerCommands.StartMainClass(params) if params.mainClass != null =>
         DebugProvider
           .getResultFromSearches(
-            folderServices.map(_.mainClassSearch(params))
+            folderServices.map(_.mainClassSearch(params)),
           )
           .liftToLspError
           .asJavaObject
 
-      case ServerCommands.StartTestSuite(params)
-          if params.target != null && params.requestData != null =>
-        onFirstSatifying(service =>
-          Future.successful(service.supportsBuildTarget(params.target))
-        )(
+      case ServerCommands.StartTestSuite(params) if params.target != null && params.requestData != null =>
+        onFirstSatifying(service => Future.successful(service.supportsBuildTarget(params.target)))(
           _.isDefined,
-          (service, someTarget) =>
-            service.startTestSuite(someTarget.get, params),
+          (service, someTarget) => service.startTestSuite(someTarget.get, params),
           () => failedRequest(s"Could not find '${params.target}' build target"),
         ).asJavaObject
-      case ServerCommands.ResolveAndStartTestSuite(params)
-          if params.testClass != null =>
+      case ServerCommands.ResolveAndStartTestSuite(params) if params.testClass != null =>
         DebugProvider
           .getResultFromSearches(
-            folderServices.map(_.testClassSearch(params))
+            folderServices.map(_.testClassSearch(params)),
           )
           .liftToLspError
           .asJavaObject
       case ServerCommands.StartAttach(params) if params.hostName != null =>
         onFirstSatifying(service =>
           Future.successful(
-            service.findBuildTargetByDisplayName(params.buildTarget)
-          )
+            service.findBuildTargetByDisplayName(params.buildTarget),
+          ),
         )(
           _.isDefined,
-          (service, someTarget) =>
-            service.createDebugSession(someTarget.get.getId()),
+          (service, someTarget) => service.createDebugSession(someTarget.get.getId()),
           () =>
             failedRequest(
-              s"Could not find '${params.buildTarget}' build target"
+              s"Could not find '${params.buildTarget}' build target",
             ),
         ).asJavaObject
       case ServerCommands.DiscoverAndRun(params) =>
@@ -1031,12 +1027,12 @@ class WorkspaceLspService(
           case Some(arg: JsonPrimitive) =>
             val value = arg.getAsString().replace("+", " ")
             scribe.debug(
-              s"Executing ResetChoicePopup ${params.getCommand()} for choice ${value}"
+              s"Executing ResetChoicePopup ${params.getCommand()} for choice ${value}",
             )
             onCurrentFolder(_.resetPopupChoice(value), "reset choice")
           case _ =>
             scribe.debug(
-              s"Executing ResetChoicePopup ${params.getCommand()} in interactive mode."
+              s"Executing ResetChoicePopup ${params.getCommand()} in interactive mode.",
             )
             onCurrentFolder(
               _.interactivePopupChoiceReset(),
@@ -1097,15 +1093,11 @@ class WorkspaceLspService(
         getServiceFor(path).copyWorksheetOutput(path.toAbsolutePath)
       case actionCommand
           if currentOrHeadOrFallback.allActionCommandsIds(
-            actionCommand.getCommand()
+            actionCommand.getCommand(),
           ) =>
         val getOptDisplayableMessage: PartialFunction[Throwable, String] = {
           case e: DisplayableException => e.getMessage()
-          case e: Exception if (e.getCause() match {
-                case _: DisplayableException => true
-                case _ => false
-              }) =>
-            e.getCause().getMessage()
+          case e: Exception if e.getCause().isInstanceOf[DisplayableException] => e.getCause().getMessage()
         }
         CancelTokens.future { token =>
           currentFolder
@@ -1113,8 +1105,8 @@ class WorkspaceLspService(
               _.executeCodeActionCommand(params, token)
                 .recover(
                   getOptDisplayableMessage andThen (languageClient
-                    .showMessage(lsp4j.MessageType.Info, _))
-                )
+                    .showMessage(lsp4j.MessageType.Info, _)),
+                ),
             )
             .getOrElse(Future.successful(()))
             .withObjectValue
@@ -1126,7 +1118,7 @@ class WorkspaceLspService(
             scribe.error(s"Unknown command '$cmd'")
           } { foundCommand =>
             scribe.error(
-              s"Expected '${foundCommand.arguments}', but got '${cmd.getArguments()}'"
+              s"Expected '${foundCommand.arguments}', but got '${cmd.getArguments()}'",
             )
           }
         Future.successful(()).asJavaObject
@@ -1138,8 +1130,8 @@ class WorkspaceLspService(
         val capabilities = new lsp4j.ServerCapabilities()
         capabilities.setExecuteCommandProvider(
           new lsp4j.ExecuteCommandOptions(
-            (ServerCommands.allIds ++ currentOrHeadOrFallback.allActionCommandsIds).toList.asJava
-          )
+            (ServerCommands.allIds ++ currentOrHeadOrFallback.allActionCommandsIds).toList.asJava,
+          ),
         )
         capabilities.setFoldingRangeProvider(true)
         capabilities.setSelectionRangeProvider(true)
@@ -1151,7 +1143,7 @@ class WorkspaceLspService(
           new lsp4j.SemanticTokensLegend(
             pc.SemanticTokens.TokenTypes.asJava,
             pc.SemanticTokens.TokenModifiers.asJava,
-          )
+          ),
         )
         capabilities.setSemanticTokensProvider(semanticTokenOptions)
         capabilities.setCodeLensProvider(new lsp4j.CodeLensOptions(false))
@@ -1165,19 +1157,19 @@ class WorkspaceLspService(
         capabilities.setRenameProvider(renameOptions)
         capabilities.setDocumentHighlightProvider(true)
         capabilities.setDocumentOnTypeFormattingProvider(
-          new lsp4j.DocumentOnTypeFormattingOptions("\n", List("\"").asJava)
+          new lsp4j.DocumentOnTypeFormattingOptions("\n", List("\"").asJava),
         )
         capabilities.setDocumentRangeFormattingProvider(
-          initialServerConfig.allowMultilineStringFormatting
+          initialServerConfig.allowMultilineStringFormatting,
         )
         capabilities.setSignatureHelpProvider(
-          new lsp4j.SignatureHelpOptions(List("(", "[", ",").asJava)
+          new lsp4j.SignatureHelpOptions(List("(", "[", ",").asJava),
         )
         capabilities.setCompletionProvider(
           new lsp4j.CompletionOptions(
             clientConfig.isCompletionItemResolve(),
             List(".", "*").asJava,
-          )
+          ),
         )
         capabilities.setCallHierarchyProvider(true)
         capabilities.setWorkspaceSymbolProvider(true)
@@ -1190,8 +1182,8 @@ class WorkspaceLspService(
                 lsp4j.CodeActionKind.QuickFix,
                 lsp4j.CodeActionKind.Refactor,
                 lsp4j.CodeActionKind.SourceOrganizeImports,
-              ).asJava
-            )
+              ).asJava,
+            ),
           )
         } else {
           capabilities.setCodeActionProvider(true)
@@ -1213,7 +1205,7 @@ class WorkspaceLspService(
           List(
             new lsp4j.FileOperationFilter(scalaFilesPattern),
             new lsp4j.FileOperationFilter(folderFilesPattern),
-          ).asJava
+          ).asJava,
         )
         val fileOperationsServerCapabilities =
           new lsp4j.FileOperationsServerCapabilities()
@@ -1224,7 +1216,7 @@ class WorkspaceLspService(
         val workspaceCapabilities =
           new lsp4j.WorkspaceServerCapabilities(workspaceCapabilitiesOptions)
         workspaceCapabilities.setFileOperations(
-          fileOperationsServerCapabilities
+          fileOperationsServerCapabilities,
         )
         capabilities.setWorkspace(workspaceCapabilities)
 
@@ -1261,7 +1253,7 @@ class WorkspaceLspService(
       val port = 5031
       var url = s"http://$host:$port"
       var render: () => String = () => ""
-      var completeCommand: HttpServerExchange => Unit = (_) => ()
+      var completeCommand: HttpServerExchange => Unit = _ => ()
       def getTestyForURI(uri: URI) =
         getServiceFor(uri.toAbsolutePath).getTastyForURI(uri)
       val server = register(
@@ -1273,7 +1265,7 @@ class WorkspaceLspService(
           () => doctor.problemsHtmlPage(url),
           getTestyForURI,
           this,
-        )
+        ),
       )
       httpServer = Some(server)
       val newClient = new MetalsHttpClient(
@@ -1365,9 +1357,9 @@ class WorkspaceLspService(
 }
 
 class Folder(
-    val path: AbsolutePath,
-    val visibleName: Option[String],
-    isKnownMetalsProject: Boolean,
+  val path: AbsolutePath,
+  val visibleName: Option[String],
+  isKnownMetalsProject: Boolean,
 ) {
 
   lazy val isMetalsProject: Boolean =
@@ -1375,9 +1367,8 @@ class Folder(
       .isMetalsProject()
 
   /**
-   * A workspace folder might be a project reference for an other project.
-   * In that case all its commands will be delegated to the main project's service.
-   * We keep the path to main project's root in a dedicated setting, so even
+   * A workspace folder might be a project reference for an other project. In that case all its commands will be
+   * delegated to the main project's service. We keep the path to main project's root in a dedicated setting, so even
    * before the main project is imported, this folder is known to be a reference.
    */
   lazy val optDelegatePath: Option[AbsolutePath] =
@@ -1391,11 +1382,11 @@ class Folder(
 
 object Folder {
   def unapply(f: Folder): Option[(AbsolutePath, Option[String])] = Some(
-    (f.path, f.visibleName)
+    (f.path, f.visibleName),
   )
   def apply(
-      folder: lsp4j.WorkspaceFolder,
-      isKnownMetalsProject: Boolean,
+    folder: lsp4j.WorkspaceFolder,
+    isKnownMetalsProject: Boolean,
   ): Folder = {
     val name = Option(folder.getName()) match {
       case Some("") => None

@@ -33,11 +33,13 @@ import scala.meta.internal.metals.testProvider.frameworks.JunitTestFinder
 import scala.meta.internal.metals.testProvider.frameworks.MunitTestFinder
 import scala.meta.internal.metals.testProvider.frameworks.ScalatestTestFinder
 import scala.meta.internal.metals.testProvider.frameworks.WeaverCatsEffectTestFinder
+//import scala.meta.internal.metals.testProvider.frameworks.SbtTestInterfaceTestFinder
 import scala.meta.internal.mtags
 import scala.meta.internal.mtags.GlobalSymbolIndex
 import scala.meta.internal.mtags.Semanticdbs
 import scala.meta.internal.parsing.Trees
 import scala.meta.internal.semanticdb
+import scala.meta.internal.semanticdb._
 import scala.meta.internal.semanticdb.TextDocument
 import scala.meta.internal.semanticdb.TextDocuments
 import scala.meta.io.AbsolutePath
@@ -48,17 +50,17 @@ import ch.epfl.scala.{bsp4j => b}
 import org.eclipse.{lsp4j => l}
 
 final class TestSuitesProvider(
-    buildTargets: BuildTargets,
-    buildTargetClasses: BuildTargetClasses,
-    trees: Trees,
-    symbolIndex: GlobalSymbolIndex,
-    semanticdbs: () => Semanticdbs,
-    buffers: Buffers,
-    clientConfig: ClientConfiguration,
-    userConfig: () => UserConfiguration,
-    client: MetalsLanguageClient,
-    folderName: String,
-    folderUri: AbsolutePath,
+  buildTargets: BuildTargets,
+  buildTargetClasses: BuildTargetClasses,
+  trees: Trees,
+  symbolIndex: GlobalSymbolIndex,
+  semanticdbs: () => Semanticdbs,
+  buffers: Buffers,
+  clientConfig: ClientConfiguration,
+  userConfig: () => UserConfiguration,
+  client: MetalsLanguageClient,
+  folderName: String,
+  folderUri: AbsolutePath,
 )(implicit ec: ExecutionContext)
     extends SemanticdbFeatureProvider
     with CodeLens {
@@ -78,7 +80,10 @@ final class TestSuitesProvider(
   private def isCodeLensEnabled = clientConfig.isDebuggingProvider() &&
     userConfig().testUserInterface == TestUserInterfaceKind.CodeLenses
 
-  private def isSuiteRefreshEnabled = isExplorerEnabled || isCodeLensEnabled
+  private def isSuiteRefreshEnabled = {
+    // REMOVE: this is enabled
+    isExplorerEnabled || isCodeLensEnabled
+  }
 
   // Applies to code lenses only
   override def isEnabled: Boolean = isCodeLensEnabled
@@ -92,8 +97,7 @@ final class TestSuitesProvider(
       "refreshTestSuites",
     )
 
-  private val updateTestCases
-      : BatchedFunction[(AbsolutePath, TextDocument), Unit] =
+  private val updateTestCases: BatchedFunction[(AbsolutePath, TextDocument), Unit] =
     BatchedFunction.fromFuture(
       { args =>
         Future
@@ -130,8 +134,9 @@ final class TestSuitesProvider(
   }
 
   override def codeLenses(
-      textDocumentWithPath: TextDocumentWithPath
+    textDocumentWithPath: TextDocumentWithPath,
   ): Future[Seq[l.CodeLens]] = Future {
+    scribe.info(s"RFERGUSON codeLenses $textDocumentWithPath")
     val path = textDocumentWithPath.filePath
     for {
       target <- buildTargets.inverseSources(path).toList
@@ -143,13 +148,13 @@ final class TestSuitesProvider(
         cases.asScala.flatMap { entry =>
           val c = ScalaTestSuiteSelection(fqn, List(entry.name).asJava)
           val params = new b.DebugSessionParams(
-            List(target).asJava
+            List(target).asJava,
           )
           params.setDataKind(
-            b.TestParamsDataKind.SCALA_TEST_SUITES_SELECTION
+            b.TestParamsDataKind.SCALA_TEST_SUITES_SELECTION,
           )
           params.setData(
-            ScalaTestSuites(List(c).asJava, Nil.asJava, Nil.asJava).toJson
+            ScalaTestSuites(List(c).asJava, Nil.asJava, Nil.asJava).toJson,
           )
           def lens(name: String, cmd: BaseCommand) = new l.CodeLens(
             entry.location.getRange(),
@@ -168,21 +173,28 @@ final class TestSuitesProvider(
   /**
    * Check if opened file contains test suite and update test cases if yes.
    */
-  def didOpen(file: AbsolutePath): Future[Unit] =
-    if (isExplorerEnabled && index.contains(file)) Future {
+  def didOpen(file: AbsolutePath): Future[Unit] = {
+    scribe.info(s"RFERGUSON TestSuiteProvider#didOpen $file")
+    // index doesn't contain file
+    scribe.info(s"RFERGUSON  isExplorerEnabled $isExplorerEnabled")
+    // if (isExplorerEnabled && index.contains(file)) Future {
+    // just ignore the index, we can find tests if we wanna
+    if (isExplorerEnabled) Future {
       val buildTargetUpdates = getTestCasesForPath(file, None)
       updateClientIfNonEmpty(buildTargetUpdates)
     }
     else Future.unit
+  }
 
   /**
    * Discover tests:
-   * - for a workspace if path isn't defined
-   * - for a given file if path is defined
+   *   - for a workspace if path isn't defined
+   *   - for a given file if path is defined
    */
   def discoverTests(
-      path: Option[AbsolutePath]
+    path: Option[AbsolutePath],
   ): List[BuildTargetUpdate] = {
+    scribe.info(s"RFERGUSON discoverTests $path")
     path match {
       case Some(path0) => getTestCasesForPath(path0, None)
       case None =>
@@ -196,17 +208,16 @@ final class TestSuitesProvider(
   }
 
   /**
-   * For test suites located in a given path,
-   * update their location (range) and their children (test cases).
+   * For test suites located in a given path, update their location (range) and their children (test cases).
    *
-   * For children, only consider 'relevant' files which have already discovered children.
-   * Metals have to update them because they can be visible to the user via:
-   * 1. Test Explorer view can be opened and tree view is visible
-   * 2. test suite's file can be opened and test cases are visible
+   * For children, only consider 'relevant' files which have already discovered children. Metals have to update them
+   * because they can be visible to the user via:
+   *   1. Test Explorer view can be opened and tree view is visible 2. test suite's file can be opened and test cases
+   *      are visible
    */
   private def refreshTestCases(
-      file: AbsolutePath,
-      doc: TextDocument,
+    file: AbsolutePath,
+    doc: TextDocument,
   ): Future[Unit] = Future {
     val suiteLocationChanged =
       if (index.contains(file))
@@ -230,15 +241,13 @@ final class TestSuitesProvider(
     }
 
   private def getTestSuitesLocationUpdates(
-      path: AbsolutePath,
-      doc: TextDocument,
+    path: AbsolutePath,
+    doc: TextDocument,
   ): List[BuildTargetUpdate] = {
     val events = for {
       metadata <- index.getMetadata(path).toList
       entry <- metadata.entries
-      symbol <- doc.symbols.find(si =>
-        si.symbol == entry.suiteDetails.symbol.value
-      )
+      symbol <- doc.symbols.find(si => si.symbol == entry.suiteDetails.symbol.value)
       loc <- doc.toLocation(path.toURI, symbol.symbol)
       if loc != entry.suiteDetails.location
     } yield {
@@ -262,21 +271,27 @@ final class TestSuitesProvider(
   }
 
   /**
-   * Retrieve test cases for a given file.
-   * Test suites, just as file which contains them, can belong to
-   * multiple build targets and we need to discover test suites
-   * for all of them.
+   * Retrieve test cases for a given file. Test suites, just as file which contains them, can belong to multiple build
+   * targets and we need to discover test suites for all of them.
    *
    * Even an empty list is being sent, it can mean that all testcases were deleted.
    */
   private def getTestCasesForPath(
-      path: AbsolutePath,
-      textDocument: Option[TextDocument],
+    path: AbsolutePath,
+    textDocument: Option[TextDocument],
   ): List[BuildTargetUpdate] = {
+    scribe.info(
+      s"RFERGUSON getTestCasesForPath ${path}",
+    )
+    computeTestEntries(path, textDocument)
     val buildTargetUpdates =
       for {
         metadata <- index.getMetadata(path).toList
         events = {
+          scribe.info(s"RFERGUSON metadata: ${metadata.getClass()} $metadata")
+          metadata.entries.foreach { entry =>
+            scribe.info(s"RFERGUSON metadata-entry: ${entry.getClass()} $entry")
+          }
           val suites = metadata.entries.map(_.suiteDetails).distinct
           val canResolve = suites.exists(_.framework.canResolveChildren)
           if (canResolve) getTestCasesForSuites(path, suites, textDocument)
@@ -293,43 +308,44 @@ final class TestSuitesProvider(
    * Searches for test cases for a given path for a provided test suites.
    *
    * If semanticDB isn't defined then it'll fetched when necessary.
-   * - file was compiled and it's opened - semanticdb will be defined
-   * - suite is discovered for the first time and the file is opened - semanticDB is not defined
-   * - file which contains suites were opened, discover tests and show them to user - semanticDB is not defined
+   *   - file was compiled and it's opened - semanticdb will be defined
+   *   - suite is discovered for the first time and the file is opened - semanticDB is not defined
+   *   - file which contains suites were opened, discover tests and show them to user - semanticDB is not defined
    */
   private def getTestCasesForSuites(
-      path: AbsolutePath,
-      suites: Seq[TestSuiteDetails],
-      doc: Option[TextDocument],
+    path: AbsolutePath,
+    suites: Seq[TestSuiteDetails],
+    doc: Option[TextDocument],
   ): Seq[AddTestCases] = {
+    scribe.info(s"RFERGUSON getTestCasesForSuites $path $doc")
     doc
       .orElse(semanticdbs().textDocument(path).documentIncludingStale)
-      .map { semanticdb =>
+      .map { foundDoc =>
         suites.flatMap { suite =>
           val testCases = suite.framework match {
             case JUnit4 =>
               junitTestFinder.findTests(
-                doc = semanticdb,
+                doc = foundDoc,
                 path = path,
                 suiteSymbol = suite.symbol,
               )
             case MUnit =>
               munitTestFinder.findTests(
-                doc = semanticdb,
+                doc = foundDoc,
                 path = path,
                 suiteName = suite.fullyQualifiedName,
                 symbol = suite.symbol,
               )
             case Scalatest =>
               scalatestTestFinder.findTests(
-                doc = semanticdb,
+                doc = foundDoc,
                 path = path,
                 suiteName = suite.fullyQualifiedName,
                 symbol = suite.symbol,
               )
             case WeaverCatsEffect =>
               weaverCatsEffect.findTests(
-                doc = semanticdb,
+                doc = foundDoc,
                 path = path,
                 suiteName = suite.fullyQualifiedName,
                 symbol = suite.symbol,
@@ -338,7 +354,7 @@ final class TestSuitesProvider(
           }
 
           if (testCases.nonEmpty) {
-            index.updateFileMetadata(path, semanticdb.md5)
+            index.updateFileMetadata(path, foundDoc.md5)
             val event = AddTestCases(
               fullyQualifiedClassName = suite.fullyQualifiedName.value,
               className = suite.className.value,
@@ -360,6 +376,7 @@ final class TestSuitesProvider(
       .filter { id =>
         buildTargets
           .scalaTarget(id)
+          // REMOVE confirmed this doesn't filter
           .forall(_.scalaInfo.getPlatform == ScalaPlatform.JVM)
       }
       .flatMap(buildTargets.info)
@@ -368,6 +385,7 @@ final class TestSuitesProvider(
       .map { buildTarget =>
         SymbolsPerTarget(
           buildTarget,
+          // this is an empty list
           buildTargetClasses.classesOf(buildTarget.getId).testClasses,
         )
       }
@@ -385,6 +403,7 @@ final class TestSuitesProvider(
     if (isExplorerEnabled) {
       val addedTestCases = addedEntries.mapValues {
         _.flatMap { entry =>
+          scribe.info(s"RFERGUSON entry: ${entry.getClass()} $entry")
           val canResolve = entry.suiteDetails.framework.canResolveChildren
           if (canResolve && buffers.contains(entry.path))
             getTestCasesForSuites(entry.path, Vector(entry.suiteDetails), None)
@@ -407,50 +426,57 @@ final class TestSuitesProvider(
   }
 
   /**
-   * BSP server returns fully qualified names of all test suites per build target.
-   * Remove cached entries which were deleted (not returned by BSP).
+   * BSP server returns fully qualified names of all test suites per build target. Remove cached entries which were
+   * deleted (not returned by BSP).
    */
   private def removeStaleTestSuites(
-      symbolsPerTargets: List[SymbolsPerTarget]
+    symbolsPerTargets: List[SymbolsPerTarget],
   ): Map[BuildTarget, List[TestExplorerEvent]] = {
     val removedBuildTargets =
       index.allSuites.map(_._1).toSet -- symbolsPerTargets.map(_.target)
     // first we want to send information about deleted build targets
     val symbolsPerTargetsWithEmpty =
       symbolsPerTargets ++ removedBuildTargets.map(
-        SymbolsPerTarget(_, TrieMap.empty)
+        SymbolsPerTarget(_, TrieMap.empty),
       )
     // when test suite is deleted it has to be removed from cache
-    symbolsPerTargetsWithEmpty.map {
-      case SymbolsPerTarget(buildTarget, testSymbols) =>
-        val fromBSP =
-          testSymbols.values
-            .map(info => FullyQualifiedName(info.fullyQualifiedName))
-            .toSet
-        val cached = index.getSuiteNames(buildTarget)
-        val diff = (cached -- fromBSP)
-        val removed = diff.foldLeft(List.empty[TestExplorerEvent]) {
-          case (deleted, unusedClassName) =>
-            index.remove(buildTarget, unusedClassName) match {
-              case Some(entry) => entry.suiteDetails.asRemoveEvent :: deleted
-              case None => deleted
-            }
+    symbolsPerTargetsWithEmpty.map { case SymbolsPerTarget(buildTarget, testSymbols) =>
+      val fromBSP =
+        testSymbols.values
+          .map(info => FullyQualifiedName(info.fullyQualifiedName))
+          .toSet
+      val cached = index.getSuiteNames(buildTarget)
+      val diff = cached -- fromBSP
+      val removed = diff.foldLeft(List.empty[TestExplorerEvent]) { case (deleted, unusedClassName) =>
+        index.remove(buildTarget, unusedClassName) match {
+          case Some(entry) => entry.suiteDetails.asRemoveEvent :: deleted
+          case None => deleted
         }
-        (buildTarget, removed)
+      }
+      (buildTarget, removed)
     }.toMap
   }
 
   /**
-   * Discover test entries per all known build targets.
-   * Once discovered, test entry is put in the cache.
+   * Discover test entries per all known build targets. Once discovered, test entry is put in the cache.
    */
   private def getTestEntries(
-      symbolsPerTarget: List[SymbolsPerTarget]
+    symbolsPerTarget: List[SymbolsPerTarget],
   ): Map[BuildTarget, List[TestEntry]] = {
     val entries = symbolsPerTarget.flatMap { currentTarget =>
       // index will be updated later
       val currentlyCached = index.getSuiteNames(currentTarget.target)
       val cachedSuites = mutable.Set.from(currentlyCached)
+      // REMOVE
+      if (currentTarget.target.getId().toString().contains(":specs")) {
+        // TestSymbols is an empty list
+        // scribe.info(s"RFERGUSON testSymbols ${currentTarget.target.getId()} ${currentTarget.testSymbols}")
+      }
+      if (currentTarget.target.getId().toString().contains(":specs")) {
+        // skip relying on bazel-bsp to get test symbols, not sure it's possible to get them from bazel
+
+      }
+
       currentTarget.testSymbols
         .readOnlySnapshot()
         .toList
@@ -459,25 +485,24 @@ final class TestSuitesProvider(
         // `a.b.WordSpec#` < `a.b.WordSpec.`). This ensures that the class is put into the cache
         // instead of the companion object.
         .sortBy { case (symbol, _) => symbol }
-        .foldLeft(List.empty[TestEntry]) {
-          case (entries, (symbol, testSymbolInfo)) =>
-            val fullyQualifiedName =
-              FullyQualifiedName(testSymbolInfo.fullyQualifiedName)
-            if (cachedSuites.contains(fullyQualifiedName)) entries
-            else {
-              val entryOpt = computeTestEntry(
-                currentTarget.target,
-                mtags.Symbol(symbol),
-                fullyQualifiedName,
-                testSymbolInfo,
-              )
-              entryOpt match {
-                case Some(entry) =>
-                  cachedSuites.add(entry.suiteDetails.fullyQualifiedName)
-                  entry :: entries
-                case None => entries
-              }
+        .foldLeft(List.empty[TestEntry]) { case (entries, (symbol, testSymbolInfo)) =>
+          val fullyQualifiedName =
+            FullyQualifiedName(testSymbolInfo.fullyQualifiedName)
+          if (cachedSuites.contains(fullyQualifiedName)) entries
+          else {
+            val entryOpt = computeTestEntry(
+              currentTarget.target,
+              mtags.Symbol(symbol),
+              fullyQualifiedName,
+              testSymbolInfo,
+            )
+            entryOpt match {
+              case Some(entry) =>
+                cachedSuites.add(entry.suiteDetails.fullyQualifiedName)
+                entry :: entries
+              case None => entries
             }
+          }
         }
     }
 
@@ -485,22 +510,21 @@ final class TestSuitesProvider(
   }
 
   /**
-   * Compute BuildTargetUpdates from added and deleted entries.
-   * Order of events in build target update: delete suite, add suite, add test cases.
+   * Compute BuildTargetUpdates from added and deleted entries. Order of events in build target update: delete suite,
+   * add suite, add test cases.
    */
   private def getBuildTargetUpdates(
-      deletedSuites: Map[BuildTarget, List[TestExplorerEvent]],
-      addedSuites: Map[BuildTarget, List[TestExplorerEvent]],
-      addedTestCases: Map[BuildTarget, List[TestExplorerEvent]],
+    deletedSuites: Map[BuildTarget, List[TestExplorerEvent]],
+    addedSuites: Map[BuildTarget, List[TestExplorerEvent]],
+    addedTestCases: Map[BuildTarget, List[TestExplorerEvent]],
   ): List[BuildTargetUpdate] = {
     // because events are being prepended, iterate through them in reversed order
     // (testcases, add, remove)
     val aggregated =
       (addedTestCases.toIterator ++ addedSuites.toIterator ++ deletedSuites.toIterator)
-        .foldLeft(Map.empty[BuildTarget, List[TestExplorerEvent]]) {
-          case (acc, (target, events)) =>
-            val prev = acc.getOrElse(target, List.empty)
-            acc.updated(target, events ++ prev)
+        .foldLeft(Map.empty[BuildTarget, List[TestExplorerEvent]]) { case (acc, (target, events)) =>
+          val prev = acc.getOrElse(target, List.empty)
+          acc.updated(target, events ++ prev)
         }
         .filter { case (_, events) => events.nonEmpty }
 
@@ -510,13 +534,38 @@ final class TestSuitesProvider(
   }
 
   /**
-   * Get test entry for the given (builTarget, symbol).
+   * Get all test entries for the given buildTarget
+   */
+  private def computeTestEntries(path: AbsolutePath, textDocument: Option[TextDocument]): List[TestEntry] = {
+    val doLog = path.toString.contains("app/CreateOAuth2ClientData.spec.scala")
+    val doc: Option[TextDocument] = textDocument.orElse(semanticdbs().textDocument(path).documentIncludingStale)
+    scribe.info(s"RFERGUSON doLog $doLog ${doc.isDefined}")
+    def isATestSuite(symbol: SymbolInformation) = {
+      symbol.signature match {
+        case ClassSignature(_, parents: List[Type], _, _) => {
+          parents.exists { case TypeRef(_, name: String, _) =>
+            // if (name.contains("sbt/testing")) {
+            scribe.info(s"RFERGUSON FOUND TYPE $name for $symbol")
+            name == "sbt/testing/Framework#"
+          }
+        }
+        case _ => false
+      }
+    }
+    doc.map(_.symbols.collect {
+      case symbol if isATestSuite(symbol) => {}
+    })
+    Nil
+  }
+
+  /**
+   * Get test entry for the given (buildTarget, symbol).
    */
   private def computeTestEntry(
-      buildTarget: BuildTarget,
-      symbol: mtags.Symbol,
-      fullyQualifiedName: FullyQualifiedName,
-      testSymbolInfo: BuildTargetClasses.TestSymbolInfo,
+    buildTarget: BuildTarget,
+    symbol: mtags.Symbol,
+    fullyQualifiedName: FullyQualifiedName,
+    testSymbolInfo: BuildTargetClasses.TestSymbolInfo,
   ): Option[TestEntry] = {
     val symbolDefinition = symbolIndex
       .definition(symbol)
@@ -549,8 +598,8 @@ final class TestSuitesProvider(
   }
 
   private def buildTargetUpdate(
-      buildTarget: BuildTarget,
-      events: Seq[TestExplorerEvent],
+    buildTarget: BuildTarget,
+    events: Seq[TestExplorerEvent],
   ): BuildTargetUpdate =
     BuildTargetUpdate(
       buildTarget,
@@ -560,15 +609,15 @@ final class TestSuitesProvider(
     )
 
   def getFramework(
-      target: BuildTarget,
-      selection: ScalaTestSuiteSelection,
+    target: BuildTarget,
+    selection: ScalaTestSuiteSelection,
   ): TestFramework = getFromCache(target, selection.className)
     .map(_.suiteDetails.framework)
     .getOrElse(Unknown)
 
   def getFromCache(
-      target: BuildTarget,
-      className: String,
+    target: BuildTarget,
+    className: String,
   ): Option[TestEntry] = {
     index.get(target, FullyQualifiedName(className))
   }
