@@ -75,7 +75,10 @@ import org.eclipse.{lsp4j => l}
  * If this doesn't scale because we have too many unrelated extension methods then we can split this up, but for now
  * it's really convenient to have to remember only one import.
  */
-object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with MtagsEnrichments {
+object MetalsEnrichments
+    extends AsJavaExtensions
+    with AsScalaExtensions
+    with MtagsEnrichments {
 
   implicit class XtensionScanner(scanner: LegacyScanner) {
 
@@ -127,7 +130,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
         .orElse(
           if (isScalaBuild)
             decodeJson(buildTarget.getData, classOf[b.ScalaBuildTarget])
-          else None,
+          else None
         )
     }
 
@@ -180,7 +183,8 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
   implicit class XtensionEditDistance(result: Either[EmptyResult, m.Position]) {
     def toPosition(dirty: l.Position): Option[l.Position] =
       foldResult(
-        onPosition = pos => Some(new l.Position(pos.startLine, pos.startColumn)),
+        onPosition =
+          pos => Some(new l.Position(pos.startLine, pos.startColumn)),
         onUnchanged = () => Some(dirty),
         onNoMatch = () => None,
       )
@@ -195,7 +199,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
                 new l.Position(pos.startLine, pos.startColumn),
                 new l.Position(pos.endLine, pos.endColumn),
               ),
-            ),
+            )
           )
         },
         () => Some(dirty),
@@ -203,9 +207,9 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
       )
 
     def foldResult[B](
-      onPosition: m.Position => B,
-      onUnchanged: () => B,
-      onNoMatch: () => B,
+        onPosition: m.Position => B,
+        onUnchanged: () => B,
+        onNoMatch: () => B,
     ): B =
       result match {
         case Right(pos) => onPosition(pos)
@@ -236,7 +240,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
             messages.ResponseErrorCode.InvalidRequest,
             e.getMessage(),
             null,
-          ),
+          )
         )
         Future.failed(newException)
       }
@@ -250,7 +254,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
       future.asInstanceOf[Future[Object]]
 
     def logErrorAndContinue(
-      doingWhat: String,
+        doingWhat: String
     )(implicit ec: ExecutionContext): Future[Unit] = {
       future.ignoreValue.recover { case e =>
         scribe.error(s"Unexpected error while $doingWhat", e)
@@ -258,7 +262,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
     }
 
     def logError(
-      doingWhat: String,
+        doingWhat: String
     )(implicit ec: ExecutionContext): Future[A] = {
       future.recover { case e =>
         scribe.error(s"Unexpected error while $doingWhat", e)
@@ -267,17 +271,17 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
     }
 
     def withTimeout(length: Int, unit: TimeUnit)(implicit
-      ec: ExecutionContext,
+        ec: ExecutionContext
     ): Future[A] = withTimeout(FiniteDuration(length, unit))
 
     def withTimeout(
-      duration: FiniteDuration,
+        duration: FiniteDuration
     )(implicit ec: ExecutionContext): Future[A] = {
       Future(Await.result(future, duration))
     }
 
     def onTimeout(length: Int, unit: TimeUnit)(
-      action: => Unit,
+        action: => Unit
     )(implicit ec: ExecutionContext): Future[A] = {
       // schedule action to execute on timeout
       future.withTimeout(length, unit).recoverWith { case e: TimeoutException =>
@@ -287,7 +291,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
     }
 
     def liftOption(implicit
-      ec: ExecutionContext,
+        ec: ExecutionContext
     ): Future[Option[A]] = future.map(Some(_))
   }
 
@@ -304,7 +308,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
 
   implicit class XtensionList[T](lst: List[T]) {
     def acceptFirst[R](
-      accept: T => Option[List[R]],
+        accept: T => Option[List[R]]
     ): List[R] = {
       @tailrec
       def loop(toCheck: List[T]): List[R] = {
@@ -384,15 +388,15 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
       containsProjectFilesSatisfying(_.isScalaOrJavaFilename)
 
     private def containsProjectFilesSatisfying(
-      fileNamePredicate: String => Boolean,
+        fileNamePredicate: String => Boolean
     ): Boolean = {
       val directoriesToCheck = Set("test", "src", "it")
       def dirFilter(f: File) = directoriesToCheck(f.getName()) || f
         .listFiles()
         .exists(dir => dir.isDirectory && directoriesToCheck(dir.getName()))
       def isScalaDir(
-        file: File,
-        dirFilter: File => Boolean = _ => true,
+          file: File,
+          dirFilter: File => Boolean = _ => true,
       ): Boolean = {
         file.listFiles().exists { file =>
           if (file.isDirectory()) dirFilter(file) && isScalaDir(file)
@@ -433,17 +437,17 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
 
     def isInReadonlyDirectory(workspace: AbsolutePath): Boolean =
       path.toNIO.startsWith(
-        workspace.resolve(Directories.readonly).toNIO,
+        workspace.resolve(Directories.readonly).toNIO
       )
 
     def isInTmpDirectory(workspace: AbsolutePath): Boolean =
       path.toNIO.startsWith(
-        workspace.resolve(Directories.tmp).toNIO,
+        workspace.resolve(Directories.tmp).toNIO
       )
 
     def isSrcZipInReadonlyDirectory(workspace: AbsolutePath): Boolean = {
       path.toNIO.startsWith(
-        workspace.resolve(Directories.dependencies.resolve("src.zip")).toNIO,
+        workspace.resolve(Directories.dependencies.resolve("src.zip")).toNIO
       )
     }
 
@@ -470,8 +474,8 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
       toFileOnDisk0(workspace, 0)
 
     private def toFileOnDisk0(
-      workspace: AbsolutePath,
-      retryCount: Int,
+        workspace: AbsolutePath,
+        retryCount: Int,
     ): AbsolutePath = {
       def toJarMeta(jar: AbsolutePath): String = {
         val time = Files.getLastModifiedTime(jar.toNIO).toMillis()
@@ -624,8 +628,8 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
 
     def createAndGetDirectories(): Seq[AbsolutePath] = {
       def createDirectoriesRec(
-        absolutePath: AbsolutePath,
-        toCreate: Seq[AbsolutePath],
+          absolutePath: AbsolutePath,
+          toCreate: Seq[AbsolutePath],
       ): Seq[AbsolutePath] = {
         if (absolutePath.exists)
           toCreate.map(path => AbsolutePath(Files.createDirectory(path.toNIO)))
@@ -705,9 +709,9 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
     }
 
     def lastIndexBetween(
-      char: Char,
-      lowerBound: Int,
-      upperBound: Int,
+        char: Char,
+        lowerBound: Int,
+        upperBound: Int,
     ): Int = {
       val safeLowerBound = Math.max(0, lowerBound)
       var index = upperBound
@@ -738,7 +742,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
       }
 
     def toAbsolutePathSafe(implicit
-      reports: ReportContext = LoggerReportContext,
+        reports: ReportContext = LoggerReportContext
     ): Option[AbsolutePath] =
       try {
         Some(toAbsolutePath)
@@ -750,7 +754,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
               s"""|Uri: $value
                   |""".stripMargin,
               error,
-            ),
+            )
           )
           None
       }
@@ -775,7 +779,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
     }
 
     def replaceAllBetween(start: String, end: String)(
-      replacement: String,
+        replacement: String
     ): String =
       if (start.isEmpty || end.isEmpty)
         value
@@ -845,11 +849,12 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
      * Useful for decoded the diagnostic data since there are overlapping unrequired keys in the structure that causes
      * issues when we try to deserialize the old top level text edit vs the newly nested actions.
      */
-    object DiagnosticDataDeserializer extends JsonDeserializer[Either[l.TextEdit, b.ScalaDiagnostic]] {
+    object DiagnosticDataDeserializer
+        extends JsonDeserializer[Either[l.TextEdit, b.ScalaDiagnostic]] {
       override def deserialize(
-        json: JsonElement,
-        typeOfT: Type,
-        context: JsonDeserializationContext,
+          json: JsonElement,
+          typeOfT: Type,
+          context: JsonDeserializationContext,
       ): Either[l.TextEdit, b.ScalaDiagnostic] = {
         json match {
           case o: JsonObject if o.has("actions") =>
@@ -923,7 +928,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
           range.startCharacter,
           range.endLine,
           range.endCharacter,
-        ),
+        )
       ).toOption
   }
 
@@ -936,7 +941,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
           range.getStart.getCharacter,
           range.getEnd.getLine,
           range.getEnd.getCharacter,
-        ),
+        )
       ).toOption
 
     def toLsp: l.Range =
@@ -949,8 +954,8 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
     }
 
     def encloses(
-      pos: l.Position,
-      includeLastCharacter: Boolean = false,
+        pos: l.Position,
+        includeLastCharacter: Boolean = false,
     ): Boolean =
       occ.range.isDefined &&
         occ.range.get.encloses(pos, includeLastCharacter)
@@ -996,7 +1001,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
         new b.ScalaWorkspaceEdit(
           lspTextEdits.map { edit =>
             new b.ScalaTextEdit(edit.getRange().toBsp, edit.getNewText())
-          }.asJava,
+          }.asJava
         )
       scalaAction.setEdit(scalaWorkspaceEdit)
     }
@@ -1145,7 +1150,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
   }
 
   implicit class XtensionClientCapabilities(
-    params: l.InitializeParams,
+      params: l.InitializeParams
   ) {
     def supportsVersionedWorkspaceEdits: Boolean =
       (for {
@@ -1161,7 +1166,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
         textDocument <- Option(capabilities.getTextDocument)
         documentSymbol <- Option(textDocument.getDocumentSymbol)
         hierarchicalDocumentSymbolSupport <- Option(
-          documentSymbol.getHierarchicalDocumentSymbolSupport,
+          documentSymbol.getHierarchicalDocumentSymbolSupport
         )
       } yield hierarchicalDocumentSymbolSupport.booleanValue).getOrElse(false)
 
@@ -1200,24 +1205,24 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
 
   implicit class OptionFutureTransformer[A](state: Future[Option[A]]) {
     def flatMapOption[B](
-      f: A => Future[Option[B]],
+        f: A => Future[Option[B]]
     )(implicit ec: ExecutionContext): Future[Option[B]] =
       state.flatMap(_.fold(Future.successful(Option.empty[B]))(f))
 
     def mapOption[B](
-      f: A => Future[B],
+        f: A => Future[B]
     )(implicit ec: ExecutionContext): Future[Option[B]] =
       state.flatMap(
-        _.fold(Future.successful(Option.empty[B]))(f(_).liftOption),
+        _.fold(Future.successful(Option.empty[B]))(f(_).liftOption)
       )
 
     def mapOptionInside[B](
-      f: A => B,
+        f: A => B
     )(implicit ec: ExecutionContext): Future[Option[B]] =
       state.map(_.map(f))
 
     def flatMapOptionInside[B](
-      f: A => Option[B],
+        f: A => Option[B]
     )(implicit ec: ExecutionContext): Future[Option[B]] =
       state.map(_.flatMap(f))
   }
@@ -1293,7 +1298,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
   }
 
   implicit class XtensionSourceBreakpoint(
-    breakpoint: l.debug.SourceBreakpoint,
+      breakpoint: l.debug.SourceBreakpoint
   ) {
 
     // LSP Position is 0-based, while breakpoints are 1-based
@@ -1339,7 +1344,9 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
           decodeJson(params.getData(), classOf[b.ScalaTestSuites])
             .toRight(cannotDecode(className))
         case b.TestParamsDataKind.SCALA_TEST_SUITES =>
-          (for (tests <- decodeJson(params.getData(), classOf[util.List[String]]))
+          (for (
+            tests <- decodeJson(params.getData(), classOf[util.List[String]])
+          )
             yield {
               val suites =
                 tests.map(new b.ScalaTestSuiteSelection(_, Nil.asJava))
@@ -1352,7 +1359,7 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
       s"Cannot decode $params as `$className`."
     def incorrectKind(className: String): Left[String, Nothing] =
       Left(
-        s"Cannot decode params as `$className` incorrect data kind: ${params.getDataKind()}.",
+        s"Cannot decode params as `$className` incorrect data kind: ${params.getDataKind()}."
       )
   }
 
@@ -1366,11 +1373,11 @@ object MetalsEnrichments extends AsJavaExtensions with AsScalaExtensions with Mt
   type IsCancelled = () => Boolean
 
   def executeBatched[T](
-    toExec: List[IsCancelled => Future[T]],
-    batchSize: Int,
-    isCancelled: IsCancelled,
+      toExec: List[IsCancelled => Future[T]],
+      batchSize: Int,
+      isCancelled: IsCancelled,
   )(implicit
-    ec: ExecutionContext,
+      ec: ExecutionContext
   ): Future[List[T]] = {
     toExec
       .grouped(batchSize)

@@ -27,45 +27,50 @@ import ch.epfl.scala.bsp4j.TextDocumentIdentifier
  * In-memory cache for looking up build server metadata.
  */
 final class BuildTargets private (
-  workspace: AbsolutePath,
-  tables: Option[Tables],
+    workspace: AbsolutePath,
+    tables: Option[Tables],
 ) {
   private val dataLock = new Object
   private var data: BuildTargets.DataSeq =
     BuildTargets.DataSeq((new TargetData) :: Nil)
   def allWritableData = data.list
 
-  val buildTargetsOrder: BuildTargetIdentifier => Int = { (t: BuildTargetIdentifier) =>
-    var score = 1
+  val buildTargetsOrder: BuildTargetIdentifier => Int = {
+    (t: BuildTargetIdentifier) =>
+      var score = 1
 
-    val isSupportedScalaVersion = scalaTarget(t).exists(t =>
-      ScalaVersions.isSupportedAtReleaseMomentScalaVersion(
-        t.scalaVersion,
-      ),
-    )
-    if (isSupportedScalaVersion) score <<= 2
+      val isSupportedScalaVersion = scalaTarget(t).exists(t =>
+        ScalaVersions.isSupportedAtReleaseMomentScalaVersion(
+          t.scalaVersion
+        )
+      )
+      if (isSupportedScalaVersion) score <<= 2
 
-    val usesJavac = javaTarget(t).nonEmpty
-    val isJVM = scalaTarget(t).exists(_.scalac.isJVM)
-    if (usesJavac) score <<= 1
-    else if (isJVM) score <<= 1
+      val usesJavac = javaTarget(t).nonEmpty
+      val isJVM = scalaTarget(t).exists(_.scalac.isJVM)
+      if (usesJavac) score <<= 1
+      else if (isJVM) score <<= 1
 
-    // note(@tgodzik) once the support for Scala 3 is on par with Scala 2 this can be removed
-    val isScala2 = scalaTarget(t).exists(info => !ScalaVersions.isScala3Version(info.scalaVersion))
-    if (isScala2) score <<= 1
+      // note(@tgodzik) once the support for Scala 3 is on par with Scala 2 this can be removed
+      val isScala2 = scalaTarget(t).exists(info =>
+        !ScalaVersions.isScala3Version(info.scalaVersion)
+      )
+      if (isScala2) score <<= 1
 
-    val isScala213Version =
-      scalaTarget(t).exists(info => info.scalaBinaryVersion == "2.13")
-    if (isScala213Version) score <<= 1
+      val isScala213Version =
+        scalaTarget(t).exists(info => info.scalaBinaryVersion == "2.13")
+      if (isScala213Version) score <<= 1
 
-    score
+      score
   }
 
   def sourceItems: Iterable[AbsolutePath] =
     data.iterable.flatMap(_.sourceItemsToBuildTarget.keys)
-  def sourceItemsToBuildTargets: Iterator[(AbsolutePath, JIterable[BuildTargetIdentifier])] =
+  def sourceItemsToBuildTargets
+      : Iterator[(AbsolutePath, JIterable[BuildTargetIdentifier])] =
     data.fromIterators(_.sourceItemsToBuildTarget.iterator)
-  private def allBuildTargetIdsInternal: Iterator[(TargetData, BuildTargetIdentifier)] =
+  private def allBuildTargetIdsInternal
+      : Iterator[(TargetData, BuildTargetIdentifier)] =
     data.fromIterators(d => d.allBuildTargetIds.iterator.map((d, _)))
   def mappedTo(path: AbsolutePath): Option[TargetData.MappedSource] =
     data.fromOptions(_.actualSources.get(path))
@@ -74,7 +79,7 @@ final class BuildTargets private (
       case (source, mapped) if mapped.path == path => source
     })
   private def findMappedSource(
-    mappedPath: AbsolutePath,
+      mappedPath: AbsolutePath
   ): Option[TargetData.MappedSource] = {
     data
       .fromOptions(_.actualSources.collectFirst {
@@ -117,8 +122,8 @@ final class BuildTargets private (
     data.fromOptions(_.jvmTarget(id))
 
   def fullClasspath(
-    id: BuildTargetIdentifier,
-    cancelPromise: Promise[Unit],
+      id: BuildTargetIdentifier,
+      cancelPromise: Promise[Unit],
   )(implicit ec: ExecutionContext): Option[Future[List[AbsolutePath]]] =
     targetClasspath(id, cancelPromise).map { lazyClasspath =>
       lazyClasspath.map { classpath =>
@@ -130,18 +135,18 @@ final class BuildTargets private (
     }
 
   def targetJarClasspath(
-    id: BuildTargetIdentifier,
+      id: BuildTargetIdentifier
   ): Option[List[AbsolutePath]] =
     data.fromOptions(_.targetJarClasspath(id))
 
   def targetClasspath(
-    id: BuildTargetIdentifier,
-    cancelPromise: Promise[Unit],
+      id: BuildTargetIdentifier,
+      cancelPromise: Promise[Unit],
   )(implicit executionContext: ExecutionContext): Option[Future[List[String]]] =
     data.fromOptions(_.targetClasspath(id, cancelPromise))
 
   def targetClassDirectories(
-    id: BuildTargetIdentifier,
+      id: BuildTargetIdentifier
   ): List[String] =
     data.fromIterators(_.targetClassDirectories(id).iterator).toList
 
@@ -166,7 +171,7 @@ final class BuildTargets private (
     data.fromIterators(_.inverseDependencySources.keysIterator)
 
   def buildTargetSources(
-    id: BuildTargetIdentifier,
+      id: BuildTargetIdentifier
   ): Iterable[AbsolutePath] =
     data
       .fromOptions(_.buildTargetSources.get(id))
@@ -174,7 +179,7 @@ final class BuildTargets private (
       .getOrElse(Nil)
 
   def buildTargetTransitiveSources(
-    id: BuildTargetIdentifier,
+      id: BuildTargetIdentifier
   ): Iterator[AbsolutePath] = {
     for {
       dependency <- buildTargetTransitiveDependencies(id).iterator
@@ -184,12 +189,12 @@ final class BuildTargets private (
   }
 
   def buildTargetTransitiveDependencies(
-    id: BuildTargetIdentifier,
+      id: BuildTargetIdentifier
   ): Iterable[BuildTargetIdentifier] =
     buildTargetTransitiveDependencies(List(id))
 
   def buildTargetTransitiveDependencies(
-    ids: List[BuildTargetIdentifier],
+      ids: List[BuildTargetIdentifier]
   ): Iterable[BuildTargetIdentifier] = {
     val isVisited = mutable.Set.empty[BuildTargetIdentifier]
     val toVisit = new java.util.ArrayDeque[BuildTargetIdentifier]
@@ -210,7 +215,7 @@ final class BuildTargets private (
   }
 
   def targetRoots(
-    buildTarget: BuildTargetIdentifier,
+      buildTarget: BuildTargetIdentifier
   ): List[AbsolutePath] = {
     val javaRoot = javaTargetRoot(buildTarget).toList
     val scalaRoot = scalaTargetRoot(buildTarget).toList
@@ -218,22 +223,22 @@ final class BuildTargets private (
   }
 
   def javaTargetRoot(
-    buildTarget: BuildTargetIdentifier,
+      buildTarget: BuildTargetIdentifier
   ): Option[AbsolutePath] =
     data.fromOptions(_.javaTargetRoot(buildTarget))
 
   def scalaTargetRoot(
-    buildTarget: BuildTargetIdentifier,
+      buildTarget: BuildTargetIdentifier
   ): Option[AbsolutePath] =
     data.fromOptions(_.scalaTargetRoot(buildTarget))
 
   def scalaTargetRoots(
-    buildTarget: BuildTargetIdentifier,
+      buildTarget: BuildTargetIdentifier
   ): List[AbsolutePath] =
     data.fromIterators(_.scalaTargetRoot(buildTarget).iterator).toList
 
   def workspaceDirectory(
-    buildTarget: BuildTargetIdentifier,
+      buildTarget: BuildTargetIdentifier
   ): Option[AbsolutePath] =
     buildServerOf(buildTarget).map(_.workspaceDirectory)
 
@@ -250,7 +255,7 @@ final class BuildTargets private (
    * Returns the first build target containing this source file.
    */
   def inverseSources(
-    source: AbsolutePath,
+      source: AbsolutePath
   ): Option[BuildTargetIdentifier] = {
     val buildTargets = sourceBuildTargets(source)
     val orSbtBuildTarget =
@@ -268,7 +273,7 @@ final class BuildTargets private (
    * Returns all build targets containing this source file.
    */
   def inverseSourcesAll(
-    source: AbsolutePath,
+      source: AbsolutePath
   ): List[BuildTargetIdentifier] = {
     val buildTargets = sourceBuildTargets(source)
     val orSbtBuildTarget =
@@ -279,7 +284,7 @@ final class BuildTargets private (
   }
 
   def inverseSourcesBsp(
-    source: AbsolutePath,
+      source: AbsolutePath
   )(implicit ec: ExecutionContext): Future[Option[BuildTargetIdentifier]] = {
     inverseSources(source) match {
       case None =>
@@ -290,7 +295,7 @@ final class BuildTargets private (
   }
 
   def inverseSourcesBspAll(
-    source: AbsolutePath,
+      source: AbsolutePath
   )(implicit ec: ExecutionContext): Future[List[BuildTargetIdentifier]] = {
     inverseSourcesAll(source) match {
       case Nil => bspInverseSources(source).map(_.toList)
@@ -300,10 +305,10 @@ final class BuildTargets private (
   }
 
   private def bspInverseSources(
-    source: AbsolutePath,
+      source: AbsolutePath
   )(implicit ec: ExecutionContext) = {
     val identifier = new TextDocumentIdentifier(
-      source.toTextDocumentIdentifier.getUri(),
+      source.toTextDocumentIdentifier.getUri()
     )
     val params = new InverseSourcesParams(identifier)
     val connections =
@@ -366,7 +371,7 @@ final class BuildTargets private (
    * This approach is not glamorous but it seems to work reasonably well.
    */
   def inferBuildTargets(
-    source: AbsolutePath,
+      source: AbsolutePath
   ): List[BuildTargetIdentifier] = {
     if (source.isJarFileSystem) {
       for {
@@ -390,7 +395,8 @@ final class BuildTargets private (
           val fromJar = jarPath(source).toList
             .flatMap { jar =>
               allBuildTargetIdsInternal.collect {
-                case pair @ (_, id) if targetJarClasspath(id).exists(_.contains(jar)) =>
+                case pair @ (_, id)
+                    if targetJarClasspath(id).exists(_.contains(jar)) =>
                   pair
               }
             }
@@ -403,7 +409,7 @@ final class BuildTargets private (
   }
 
   def inferBuildTarget(
-    source: AbsolutePath,
+      source: AbsolutePath
   ): Option[BuildTargetIdentifier] =
     inferBuildTargets(source).maxByOption(buildTargetsOrder)
 
@@ -417,7 +423,7 @@ final class BuildTargets private (
   private def jarPath(source: AbsolutePath): Option[AbsolutePath] = {
     source.jarPath.map { sourceJarPath =>
       sourceJarPath.parent.resolve(
-        source.filename.replace("-sources.jar", ".jar"),
+        source.filename.replace("-sources.jar", ".jar")
       )
     }
   }
@@ -432,10 +438,10 @@ final class BuildTargets private (
    *   path to the source jar for that jar
    */
   private def sourceJarPathFallback(
-    sourceJarPath: AbsolutePath,
+      sourceJarPath: AbsolutePath
   ): Option[AbsolutePath] = {
     val fallback = sourceJarPath.parent.resolve(
-      sourceJarPath.filename.replace(".jar", "-sources.jar"),
+      sourceJarPath.filename.replace(".jar", "-sources.jar")
     )
     if (fallback.exists) Some(fallback)
     else None
@@ -446,7 +452,7 @@ final class BuildTargets private (
    * because `*.sbt` and `*.scala` aren't included in `sourceFiles` set
    */
   def sbtBuildScalaTarget(
-    file: AbsolutePath,
+      file: AbsolutePath
   ): Option[BuildTargetIdentifier] = {
     val targetMetaBuildDir =
       if (file.isSbt) file.parent.resolve("project") else file.parent
@@ -466,13 +472,13 @@ final class BuildTargets private (
   }
 
   case class InferredBuildTarget(
-    jar: AbsolutePath,
-    symbol: String,
-    id: BuildTargetIdentifier,
-    sourceJar: Option[AbsolutePath],
+      jar: AbsolutePath,
+      symbol: String,
+      id: BuildTargetIdentifier,
+      sourceJar: Option[AbsolutePath],
   )
   def inferBuildTarget(
-    toplevels: Iterable[Symbol],
+      toplevels: Iterable[Symbol]
   ): Option[InferredBuildTarget] = {
     val classloader = new URLClassLoader(
       allWorkspaceJars.map(_.toNIO.toUri().toURL()).toArray,
@@ -517,7 +523,7 @@ final class BuildTargets private (
   }
 
   def sourceBuildTargets(
-    sourceItem: AbsolutePath,
+      sourceItem: AbsolutePath
   ): Option[Iterable[BuildTargetIdentifier]] =
     data.fromOptions(_.sourceBuildTargets(sourceItem))
 
@@ -536,8 +542,8 @@ final class BuildTargets private (
       .find(item => source.toNIO.startsWith(item.dealias.toNIO))
 
   def isInverseDependency(
-    query: BuildTargetIdentifier,
-    roots: List[BuildTargetIdentifier],
+      query: BuildTargetIdentifier,
+      roots: List[BuildTargetIdentifier],
   ): Boolean = {
     BuildTargets.isInverseDependency(
       query,
@@ -546,17 +552,17 @@ final class BuildTargets private (
     )
   }
   def inverseDependencyLeaves(
-    target: BuildTargetIdentifier,
+      target: BuildTargetIdentifier
   ): collection.Set[BuildTargetIdentifier] = {
     computeInverseDependencies(target).leaves
   }
   def allInverseDependencies(
-    target: BuildTargetIdentifier,
+      target: BuildTargetIdentifier
   ): collection.Set[BuildTargetIdentifier] = {
     computeInverseDependencies(target).visited
   }
   private def computeInverseDependencies(
-    target: BuildTargetIdentifier,
+      target: BuildTargetIdentifier
   ): BuildTargets.InverseDependencies = {
     BuildTargets.inverseDependencies(
       List(target),
@@ -565,14 +571,14 @@ final class BuildTargets private (
   }
 
   @deprecated(
-    "This might return false positives since names of jars could repeat.",
+    "This might return false positives since names of jars could repeat."
   )
   def sourceJarFile(sourceJarName: String): Option[AbsolutePath] =
     data.fromOptions(_.sourceJarNameToJarFile.get(sourceJarName))
 
   def sourceJarFor(
-    id: BuildTargetIdentifier,
-    jar: AbsolutePath,
+      id: BuildTargetIdentifier,
+      jar: AbsolutePath,
   ): Option[AbsolutePath] = {
     data
       .fromOptions(_.findSourceJarOf(jar, Some(id)))
@@ -580,7 +586,7 @@ final class BuildTargets private (
   }
 
   def sourceJarFor(
-    jar: AbsolutePath,
+      jar: AbsolutePath
   ): Option[AbsolutePath] = {
     data
       .fromOptions(_.findSourceJarOf(jar, targetId = None))
@@ -588,7 +594,7 @@ final class BuildTargets private (
   }
 
   def inverseDependencySource(
-    sourceJar: AbsolutePath,
+      sourceJar: AbsolutePath
   ): collection.Set[BuildTargetIdentifier] = {
     data
       .fromOptions(_.inverseDependencySources.get(sourceJar))
@@ -615,7 +621,7 @@ final class BuildTargets private (
     data.iterator.exists(_.checkIfGeneratedDir(path))
 
   def buildServerOf(
-    id: BuildTargetIdentifier,
+      id: BuildTargetIdentifier
   ): Option[BuildServerConnection] =
     data.fromOptions(_.targetToConnection.get(id))
 
@@ -639,15 +645,17 @@ final class BuildTargets private (
           .get(scalaVersion)
           .exists(Version.fromString(_) < Version.fromString("1.3.2"))
 
-    scalaTarget(id).exists(scalaTaget => scalaVersionSupportsPcReferences(scalaTaget.scalaVersion))
+    scalaTarget(id).exists(scalaTaget =>
+      scalaVersionSupportsPcReferences(scalaTaget.scalaVersion)
+    )
   }
 }
 
 object BuildTargets {
   def from(
-    workspace: AbsolutePath,
-    data: TargetData,
-    tables: Tables,
+      workspace: AbsolutePath,
+      data: TargetData,
+      tables: Tables,
   ): BuildTargets = {
     val targets = new BuildTargets(workspace, Some(tables))
     targets.addData(data)
@@ -657,11 +665,11 @@ object BuildTargets {
   def empty: BuildTargets = new BuildTargets(PathIO.workingDirectory, None)
 
   def isInverseDependency(
-    query: BuildTargetIdentifier,
-    roots: List[BuildTargetIdentifier],
-    inverseDeps: BuildTargetIdentifier => Option[
-      collection.Seq[BuildTargetIdentifier],
-    ],
+      query: BuildTargetIdentifier,
+      roots: List[BuildTargetIdentifier],
+      inverseDeps: BuildTargetIdentifier => Option[
+        collection.Seq[BuildTargetIdentifier]
+      ],
   ): Boolean = {
     val isVisited = mutable.Set.empty[BuildTargetIdentifier]
     @tailrec
@@ -690,10 +698,10 @@ object BuildTargets {
    * For example, returns `[D, E, C]` given the following graph with root A: {{{A ^ ^ \| | B C ^ ^ \| | D E}}}
    */
   def inverseDependencies(
-    root: List[BuildTargetIdentifier],
-    inverseDeps: BuildTargetIdentifier => Option[
-      collection.Seq[BuildTargetIdentifier],
-    ],
+      root: List[BuildTargetIdentifier],
+      inverseDeps: BuildTargetIdentifier => Option[
+        collection.Seq[BuildTargetIdentifier]
+      ],
   ): InverseDependencies = {
     val isVisited = mutable.Set.empty[BuildTargetIdentifier]
     val leaves = mutable.Set.empty[BuildTargetIdentifier]
@@ -720,8 +728,8 @@ object BuildTargets {
   }
 
   case class InverseDependencies(
-    visited: collection.Set[BuildTargetIdentifier],
-    leaves: collection.Set[BuildTargetIdentifier],
+      visited: collection.Set[BuildTargetIdentifier],
+      leaves: collection.Set[BuildTargetIdentifier],
   )
 
   final case class DataSeq(list: List[TargetData]) {

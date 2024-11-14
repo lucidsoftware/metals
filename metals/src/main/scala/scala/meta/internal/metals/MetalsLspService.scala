@@ -47,8 +47,11 @@ import scala.meta.internal.metals.formatting.RangeFormattingProvider
 import scala.meta.internal.metals.newScalaFile.NewFileProvider
 import scala.meta.internal.metals.scalacli.ScalaCli
 import scala.meta.internal.metals.scalacli.ScalaCliServers
-import scala.meta.internal.metals.testProvider.BuildTargetUpdate
-import scala.meta.internal.metals.testProvider.TestSuitesProvider
+import scala.meta.internal.metals.testProvider.{
+  BuildTargetUpdate,
+  TestFrameworkProvider,
+  TestSuitesProvider,
+}
 import scala.meta.internal.metals.watcher.FileWatcher
 import scala.meta.internal.mtags._
 import scala.meta.internal.parsing.ClassFinder
@@ -93,22 +96,22 @@ import org.eclipse.{lsp4j => l}
  *   server by the client.
  */
 abstract class MetalsLspService(
-  ec: ExecutionContextExecutorService,
-  val sh: ScheduledExecutorService,
-  serverInputs: MetalsServerInputs,
-  val languageClient: ConfiguredLanguageClient,
-  initializeParams: InitializeParams,
-  val clientConfig: ClientConfiguration,
-  val statusBar: StatusBar,
-  getFocusedDocument: () => Option[AbsolutePath],
-  shellRunner: ShellRunner,
-  val timerProvider: TimerProvider,
-  val folder: AbsolutePath,
-  folderVisibleName: Option[String],
-  headDoctor: HeadDoctor,
-  bspStatus: BspStatus,
-  val workDoneProgress: WorkDoneProgress,
-  maxScalaCliServers: Int,
+    ec: ExecutionContextExecutorService,
+    val sh: ScheduledExecutorService,
+    serverInputs: MetalsServerInputs,
+    val languageClient: ConfiguredLanguageClient,
+    initializeParams: InitializeParams,
+    val clientConfig: ClientConfiguration,
+    val statusBar: StatusBar,
+    getFocusedDocument: () => Option[AbsolutePath],
+    shellRunner: ShellRunner,
+    val timerProvider: TimerProvider,
+    val folder: AbsolutePath,
+    folderVisibleName: Option[String],
+    headDoctor: HeadDoctor,
+    bspStatus: BspStatus,
+    val workDoneProgress: WorkDoneProgress,
+    maxScalaCliServers: Int,
 ) extends Folder(folder, folderVisibleName, isKnownMetalsProject = true)
     with Cancelable
     with TextDocumentService
@@ -151,7 +154,7 @@ abstract class MetalsLspService(
   implicit val executionContext: ExecutionContextExecutorService = ec
 
   protected val embedded: Embedded = register(
-    new Embedded(workDoneProgress),
+    new Embedded(workDoneProgress)
   )
 
   val tables: Tables = register(new Tables(folder, time))
@@ -310,6 +313,12 @@ abstract class MetalsLspService(
     clientConfig.commandInHtmlFormat(),
   )
 
+  protected val testFrameworkProvider: TestFrameworkProvider =
+    new TestFrameworkProvider(
+      semanticdbs,
+      trees,
+    )
+
   protected val testProvider: TestSuitesProvider = new TestSuitesProvider(
     buildTargets,
     buildTargetClasses,
@@ -322,6 +331,7 @@ abstract class MetalsLspService(
     languageClient,
     getVisibleName,
     folder,
+    testFrameworkProvider,
   )
 
   protected val codeLensProvider: CodeLensProvider = {
@@ -394,7 +404,7 @@ abstract class MetalsLspService(
         javaInteractiveSemanticdb,
         buffers,
         scalaCli,
-      ),
+      )
     )
   }
 
@@ -408,7 +418,7 @@ abstract class MetalsLspService(
     val worksheetPublisher =
       if (clientConfig.isDecorationProvider())
         new DecorationWorksheetPublisher(
-          clientConfig.isInlineDecorationProvider(),
+          clientConfig.isInlineDecorationProvider()
         )
       else
         new WorkspaceEditWorksheetPublisher(buffers, trees)
@@ -427,7 +437,7 @@ abstract class MetalsLspService(
         compilations,
         scalaVersionSelector,
         clientConfig.initialConfig,
-      ),
+      )
     )
   }
 
@@ -450,7 +460,7 @@ abstract class MetalsLspService(
       sourceMapper,
       worksheetProvider,
       () => referencesProvider,
-    ),
+    )
   )
 
   val referencesProvider: ReferenceProvider = new ReferenceProvider(
@@ -640,8 +650,8 @@ abstract class MetalsLspService(
   def allActionCommandsIds = codeActionProvider.allActionCommandsIds
 
   def executeCodeActionCommand(
-    params: l.ExecuteCommandParams,
-    token: CancelToken,
+      params: l.ExecuteCommandParams,
+      token: CancelToken,
   ): Future[Unit] = codeActionProvider.executeCommands(params, token)
 
   protected def registerNiceToHaveFilePatterns(): Unit = {
@@ -661,11 +671,11 @@ abstract class MetalsLspService(
               clientConfig
                 .globSyntax()
                 .registrationOptions(
-                  this.folder,
+                  this.folder
                 ),
-            ),
-          ).asJava,
-        ),
+            )
+          ).asJava
+        )
       )
     }
   }
@@ -685,7 +695,7 @@ abstract class MetalsLspService(
                 onInitialized(),
                 Future(workspaceSymbols.indexClasspath()),
                 Future(formattingProvider.load()),
-              ),
+              )
             )
       } yield ()
     } else Future.unit
@@ -694,7 +704,7 @@ abstract class MetalsLspService(
     tables.fingerprints.save(
       fingerprints.getAllFingerprints().filter { case (path, _) =>
         path.isScalaOrJava && !path.isDependencySource(folder)
-      },
+      }
     )
     cancel()
   }
@@ -710,7 +720,7 @@ abstract class MetalsLspService(
     val old = setUserConfig(newConfig)
     if (userConfig.excludedPackages != old.excludedPackages) {
       excludedPackageHandler = ExcludedPackagesHandler.fromUserConfiguration(
-        userConfig.excludedPackages.getOrElse(Nil),
+        userConfig.excludedPackages.getOrElse(Nil)
       )
       workspaceSymbols.indexClasspath()
     }
@@ -719,7 +729,7 @@ abstract class MetalsLspService(
       if (!ScalaVersions.isSupportedAtReleaseMomentScalaVersion(version)) {
         val params =
           Messages.UnsupportedScalaVersion.fallbackScalaVersionParams(
-            version,
+            version
           )
         languageClient.showMessage(params)
       }
@@ -735,10 +745,9 @@ abstract class MetalsLspService(
   }
 
   override def didOpen(
-    params: DidOpenTextDocumentParams,
+      params: DidOpenTextDocumentParams
   ): CompletableFuture[Unit] = {
     val path = params.getTextDocument.getUri.toAbsolutePath
-    scribe.info(s"RFERGUSON lspService didOpen $path")
     // In some cases like peeking definition didOpen might be followed up by close
     // and we would lose the notion of the focused document
     recentlyOpenedFiles.add(path)
@@ -755,7 +764,7 @@ abstract class MetalsLspService(
 
     val optVersion =
       Option.when(initializeParams.supportsVersionedWorkspaceEdits)(
-        params.getTextDocument().getVersion(),
+        params.getTextDocument().getVersion()
       )
 
     packageProvider
@@ -774,10 +783,8 @@ abstract class MetalsLspService(
     val parser = parseTrees(path)
 
     if (path.isDependencySource(folder)) {
-      scribe.info(s"RFERGUSON isDependencySOurce $path $folder")
       parser.asJava
     } else {
-      scribe.info(s"RFERGUSON is not dependency source $path $folder")
       buildServerPromise.future.flatMap { _ =>
         def load(): Future[Unit] = {
           Future
@@ -788,7 +795,7 @@ abstract class MetalsLspService(
                 parser,
                 interactive,
                 testProvider.didOpen(path),
-              ),
+              )
             )
             .ignoreValue
         }
@@ -798,12 +805,12 @@ abstract class MetalsLspService(
   }
 
   def maybeImportFileAndLoad(
-    path: AbsolutePath,
-    load: () => Future[Unit],
+      path: AbsolutePath,
+      load: () => Future[Unit],
   ): Future[Unit]
 
   def didFocus(
-    uri: String,
+      uri: String
   ): CompletableFuture[DidFocusResult.Value] = {
     val path = uri.toAbsolutePath
     val prevBuildTarget = focusedDocumentBuildTarget.getAndUpdate { current =>
@@ -825,8 +832,8 @@ abstract class MetalsLspService(
   }
 
   protected def maybeCompileOnDidFocus(
-    path: AbsolutePath,
-    prevBuildTarget: b.BuildTargetIdentifier,
+      path: AbsolutePath,
+      prevBuildTarget: b.BuildTargetIdentifier,
   ): Future[DidFocusResult.Value] =
     buildTargets.inverseSources(path) match {
       case Some(target) if prevBuildTarget != target =>
@@ -848,12 +855,12 @@ abstract class MetalsLspService(
   def unpause(): Unit = pauseables.unpause()
 
   override def didChange(
-    params: DidChangeTextDocumentParams,
+      params: DidChangeTextDocumentParams
   ): CompletableFuture[Unit] = {
     val changesSize = params.getContentChanges.size()
     if (changesSize != 1) {
       scribe.debug(
-        s"did change notification contained $changesSize content changes, expected 1",
+        s"did change notification contained $changesSize content changes, expected 1"
       )
     }
 
@@ -879,7 +886,7 @@ abstract class MetalsLspService(
   }
 
   override def didSave(
-    params: DidSaveTextDocumentParams,
+      params: DidSaveTextDocumentParams
   ): CompletableFuture[Unit] = {
     val path = params.getTextDocument.getUri.toAbsolutePath
     savedFiles.add(path)
@@ -892,7 +899,7 @@ abstract class MetalsLspService(
           renameProvider.runSave(),
           parseTrees(path),
           onChange(List(path)),
-        ),
+        )
       )
       .ignoreValue
       .asJava
@@ -903,7 +910,7 @@ abstract class MetalsLspService(
   }
 
   def didChangeWatchedFiles(
-    events: List[FileEvent],
+      events: List[FileEvent]
   ): Future[Unit] = {
     val importantEvents =
       events
@@ -912,7 +919,7 @@ abstract class MetalsLspService(
             case None => true
             case Some(path) =>
               savedFiles.isRecentlyActive(path) || path.isDirectory
-          },
+          }
         ) // de-duplicate didSave events.
         .toSeq
     val (deleteEvents, changeAndCreateEvents) =
@@ -920,7 +927,7 @@ abstract class MetalsLspService(
     val (bloopReportDelete, otherDeleteEvents) =
       deleteEvents.partition(
         _.getUri().toAbsolutePath.toNIO
-          .startsWith(reports.bloop.maybeReportsDir),
+          .startsWith(reports.bloop.maybeReportsDir)
       )
     if (bloopReportDelete.nonEmpty) connectionBspStatus.onReportsUpdate()
     otherDeleteEvents.map(_.getUri().toAbsolutePath).foreach(onDelete)
@@ -946,7 +953,7 @@ abstract class MetalsLspService(
           Future(indexer.reindexWorkspaceSources(paths)),
           compilations
             .compileFiles(paths, Option(focusedDocumentBuildTarget.get())),
-        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f))),
+        ) ++ paths.map(f => Future(interactiveSemanticdbs.textDocument(f)))
       )
       .ignoreValue
   }
@@ -961,27 +968,27 @@ abstract class MetalsLspService(
             diagnostics.didDelete(path)
             testProvider.onFileDelete(path)
           },
-        ),
+        )
       )
       .ignoreValue
   }
 
   override def definition(
-    position: TextDocumentPositionParams,
+      position: TextDocumentPositionParams
   ): CompletableFuture[util.List[Location]] =
     CancelTokens.future { token =>
       definitionOrReferences(position, token).map(_.locations)
     }
 
   override def typeDefinition(
-    position: TextDocumentPositionParams,
+      position: TextDocumentPositionParams
   ): CompletableFuture[util.List[Location]] =
     CancelTokens.future { token =>
       compilers.typeDefinition(position, token).map(_.locations)
     }
 
   override def implementation(
-    position: TextDocumentPositionParams,
+      position: TextDocumentPositionParams
   ): CompletableFuture[util.List[Location]] =
     CancelTokens.future { _ =>
       implementationProvider.implementations(position).map(_.asJava)
@@ -999,13 +1006,13 @@ abstract class MetalsLspService(
               worksheetProvider.hover(path, params.getPosition)
             else
               None
-          }.orNull,
+          }.orNull
         )
     }
   }
 
   def inlayHints(
-    params: InlayHintParams,
+      params: InlayHintParams
   ): CompletableFuture[util.List[InlayHint]] = {
     CancelTokens.future { token =>
       for {
@@ -1019,7 +1026,7 @@ abstract class MetalsLspService(
   }
 
   def inlayHintResolve(
-    inlayHint: InlayHint,
+      inlayHint: InlayHint
   ): CompletableFuture[InlayHint] = {
     CancelTokens.future { token =>
       focusedDocument
@@ -1029,7 +1036,7 @@ abstract class MetalsLspService(
   }
 
   override def documentHighlights(
-    params: TextDocumentPositionParams,
+      params: TextDocumentPositionParams
   ): CompletableFuture[util.List[DocumentHighlight]] = {
     if (params.getTextDocument.getUri.toAbsolutePath.isJava)
       CancelTokens { _ => javaHighlightProvider.documentHighlight(params) }
@@ -1040,9 +1047,9 @@ abstract class MetalsLspService(
   }
 
   override def documentSymbol(
-    params: DocumentSymbolParams,
+      params: DocumentSymbolParams
   ): CompletableFuture[
-    JEither[util.List[DocumentSymbol], util.List[SymbolInformation]],
+    JEither[util.List[DocumentSymbol], util.List[SymbolInformation]]
   ] =
     CancelTokens { _ =>
       documentSymbolProvider
@@ -1053,7 +1060,7 @@ abstract class MetalsLspService(
   protected def optProjectRoot: Option[AbsolutePath] = None
 
   override def formatting(
-    params: DocumentFormattingParams,
+      params: DocumentFormattingParams
   ): CompletableFuture[util.List[TextEdit]] =
     CancelTokens.future { token =>
       val path = params.getTextDocument.getUri.toAbsolutePath
@@ -1066,7 +1073,7 @@ abstract class MetalsLspService(
     }
 
   override def onTypeFormatting(
-    params: DocumentOnTypeFormattingParams,
+      params: DocumentOnTypeFormattingParams
   ): CompletableFuture[util.List[TextEdit]] =
     CancelTokens { _ =>
       val path = params.getTextDocument.getUri.toAbsolutePath
@@ -1077,7 +1084,7 @@ abstract class MetalsLspService(
     }
 
   override def rangeFormatting(
-    params: DocumentRangeFormattingParams,
+      params: DocumentRangeFormattingParams
   ): CompletableFuture[util.List[TextEdit]] =
     CancelTokens { _ =>
       val path = params.getTextDocument.getUri.toAbsolutePath
@@ -1088,21 +1095,21 @@ abstract class MetalsLspService(
     }
 
   override def prepareRename(
-    params: TextDocumentPositionParams,
+      params: TextDocumentPositionParams
   ): CompletableFuture[l.Range] =
     CancelTokens.future { token =>
       renameProvider.prepareRename(params, token).map(_.orNull)
     }
 
   override def rename(
-    params: RenameParams,
+      params: RenameParams
   ): CompletableFuture[WorkspaceEdit] =
     CancelTokens.future { token =>
       renameProvider.rename(params, token)
     }
 
   override def references(
-    params: ReferenceParams,
+      params: ReferenceParams
   ): CompletableFuture[util.List[Location]] =
     CancelTokens.future { _ =>
       referencesResult(params).map(getSortedLocations)
@@ -1123,7 +1130,7 @@ abstract class MetalsLspService(
   }
 
   def referencesResult(
-    params: ReferenceParams,
+      params: ReferenceParams
   ): Future[List[ReferencesResult]] = {
     val timer = new Timer(time)
     referencesProvider.references(params).map { results =>
@@ -1134,7 +1141,7 @@ abstract class MetalsLspService(
           scribe.info(
             s"time: found ${results.flatMap(_.locations).length} references to symbol '${results
                 .map(_.symbol)
-                .mkString("and")}' in $timer",
+                .mkString("and")}' in $timer"
           )
         }
       }
@@ -1143,7 +1150,7 @@ abstract class MetalsLspService(
   }
 
   override def semanticTokensFull(
-    params: SemanticTokensParams,
+      params: SemanticTokensParams
   ): CompletableFuture[SemanticTokens] = {
     CancelTokens.future { token =>
       for {
@@ -1157,33 +1164,33 @@ abstract class MetalsLspService(
   }
 
   override def prepareCallHierarchy(
-    params: CallHierarchyPrepareParams,
+      params: CallHierarchyPrepareParams
   ): CompletableFuture[util.List[CallHierarchyItem]] =
     CancelTokens.future { token =>
       callHierarchyProvider.prepare(params, token).map(_.asJava)
     }
 
   override def callHierarchyIncomingCalls(
-    params: CallHierarchyIncomingCallsParams,
+      params: CallHierarchyIncomingCallsParams
   ): CompletableFuture[util.List[CallHierarchyIncomingCall]] =
     CancelTokens.future { token =>
       callHierarchyProvider.incomingCalls(params, token).map(_.asJava)
     }
 
   override def callHierarchyOutgoingCalls(
-    params: CallHierarchyOutgoingCallsParams,
+      params: CallHierarchyOutgoingCallsParams
   ): CompletableFuture[util.List[CallHierarchyOutgoingCall]] =
     CancelTokens.future { token =>
       callHierarchyProvider.outgoingCalls(params, token).map(_.asJava)
     }
 
   override def completion(
-    params: CompletionParams,
+      params: CompletionParams
   ): CompletableFuture[CompletionList] =
     CancelTokens.future { token => compilers.completions(params, token) }
 
   override def completionItemResolve(
-    item: CompletionItem,
+      item: CompletionItem
   ): CompletableFuture[CompletionItem] =
     CancelTokens.future { _ =>
       if (clientConfig.isCompletionItemResolve) {
@@ -1194,21 +1201,21 @@ abstract class MetalsLspService(
     }
 
   override def signatureHelp(
-    params: TextDocumentPositionParams,
+      params: TextDocumentPositionParams
   ): CompletableFuture[SignatureHelp] =
     CancelTokens.future { token =>
       compilers.signatureHelp(params, token)
     }
 
   override def codeAction(
-    params: CodeActionParams,
+      params: CodeActionParams
   ): CompletableFuture[util.List[l.CodeAction]] =
     CancelTokens.future { token =>
       codeActionProvider.codeActions(params, token).map(_.asJava)
     }
 
   override def codeLens(
-    params: CodeLensParams,
+      params: CodeLensParams
   ): CompletableFuture[util.List[CodeLens]] =
     CancelTokens.future { _ =>
       buildServerPromise.future.flatMap { _ =>
@@ -1223,7 +1230,7 @@ abstract class MetalsLspService(
     }
 
   override def foldingRange(
-    params: FoldingRangeRequestParams,
+      params: FoldingRangeRequestParams
   ): CompletableFuture[util.List[FoldingRange]] = {
     CancelTokens.future { _ =>
       val path = params.getTextDocument().getUri().toAbsolutePath
@@ -1239,7 +1246,7 @@ abstract class MetalsLspService(
   }
 
   override def selectionRange(
-    params: SelectionRangeParams,
+      params: SelectionRangeParams
   ): CompletableFuture[util.List[SelectionRange]] = {
     CancelTokens.future { token =>
       compilers.selectionRange(params, token)
@@ -1247,8 +1254,8 @@ abstract class MetalsLspService(
   }
 
   def workspaceSymbol(
-    params: WorkspaceSymbolParams,
-    token: CancelToken,
+      params: WorkspaceSymbolParams,
+      token: CancelToken,
   ): Future[List[SymbolInformation]] =
     indexingPromise.future.map { _ =>
       val timer = new Timer(time)
@@ -1258,7 +1265,7 @@ abstract class MetalsLspService(
           .toList
       if (clientConfig.initialConfig.statistics.isWorkspaceSymbol) {
         scribe.info(
-          s"time: found ${result.length} results for query '${params.getQuery}' in $timer",
+          s"time: found ${result.length} results for query '${params.getQuery}' in $timer"
         )
       }
       result
@@ -1286,27 +1293,27 @@ abstract class MetalsLspService(
       .flatMap(applyEdits(uri, _))
 
   def runScalafixRules(
-    uri: String,
-    rules: List[String],
+      uri: String,
+      rules: List[String],
   ): Future[ApplyWorkspaceEditResponse] =
     scalafixProvider
       .runRulesOrPrompt(uri.toAbsolutePath, rules)
       .flatMap(applyEdits(uri, _))
 
   protected def applyEdits(
-    uri: String,
-    edits: List[TextEdit],
+      uri: String,
+      edits: List[TextEdit],
   ): Future[ApplyWorkspaceEditResponse] = languageClient
     .applyEdit(
       new l.ApplyWorkspaceEditParams(
-        new l.WorkspaceEdit(Map(uri -> edits.asJava).asJava),
-      ),
+        new l.WorkspaceEdit(Map(uri -> edits.asJava).asJava)
+      )
     )
     .asScala
 
   def chooseClass(
-    uri: String,
-    granurality: ClassFinderGranularity,
+      uri: String,
+      granurality: ClassFinderGranularity,
   ): Future[DecoderResponse] =
     fileDecoderProvider.chooseClassFromFile(
       uri.toAbsolutePath,
@@ -1337,7 +1344,7 @@ abstract class MetalsLspService(
       .headOption
 
   def gotoSupermethod(
-    textDocumentPositionParams: TextDocumentPositionParams,
+      textDocumentPositionParams: TextDocumentPositionParams
   ): CompletableFuture[Object] =
     Future {
       val command =
@@ -1347,7 +1354,7 @@ abstract class MetalsLspService(
     }.asJavaObject
 
   def superMethodHierarchy(
-    textDocumentPositionParams: TextDocumentPositionParams,
+      textDocumentPositionParams: TextDocumentPositionParams
   ): CompletableFuture[Object] =
     supermethods
       .jumpToSelectedSuperMethod(textDocumentPositionParams)
@@ -1358,10 +1365,10 @@ abstract class MetalsLspService(
   }
 
   def createFile(
-    directoryURI: Option[String],
-    name: Option[String],
-    fileType: Option[String],
-    isScala: Boolean,
+      directoryURI: Option[String],
+      name: Option[String],
+      fileType: Option[String],
+      isScala: Boolean,
   ): CompletableFuture[Object] =
     newFileProvider
       .handleFileCreation(directoryURI.map(new URI(_)), name, fileType, isScala)
@@ -1375,7 +1382,7 @@ abstract class MetalsLspService(
   def stopScalaCli(): Future[Unit] = scalaCli.stop()
 
   def copyWorksheetOutput(
-    worksheetPath: AbsolutePath,
+      worksheetPath: AbsolutePath
   ): CompletableFuture[Object] = {
     val output = worksheetProvider.copyWorksheetOutput(worksheetPath)
     if (output.nonEmpty) {
@@ -1393,19 +1400,19 @@ abstract class MetalsLspService(
     buildTargets.findByDisplayName(target)
 
   def willRenameFile(
-    oldPath: AbsolutePath,
-    newPath: AbsolutePath,
+      oldPath: AbsolutePath,
+      newPath: AbsolutePath,
   ): Future[WorkspaceEdit] =
     packageProvider.willMovePath(oldPath, newPath)
 
   def findTextInDependencyJars(
-    params: FindTextInDependencyJarsRequest,
+      params: FindTextInDependencyJarsRequest
   ): Future[List[Location]] = findTextInJars.find(params)
 
   protected def onBuildTargetChanges(params: b.DidChangeBuildTarget): Unit
 
   protected def importAfterScalaCliChanges(
-    servers: Iterable[ScalaCli],
+      servers: Iterable[ScalaCli]
   ): Iterable[Unit] =
     servers.map { server =>
       server
@@ -1467,7 +1474,7 @@ abstract class MetalsLspService(
       sourceMapper,
       () => userConfig,
       testProvider,
-    ),
+    )
   )
   buildClient.registerLogForwarder(debugProvider)
 
@@ -1477,23 +1484,23 @@ abstract class MetalsLspService(
       .flatMap(debugProvider.asSession)
 
   def createDebugSession(
-    target: b.BuildTargetIdentifier,
+      target: b.BuildTargetIdentifier
   ): Future[DebugSession] =
     debugProvider.createDebugSession(target).flatMap(debugProvider.asSession)
 
   def testClassSearch(
-    params: DebugUnresolvedTestClassParams,
+      params: DebugUnresolvedTestClassParams
   ): DebugProvider.TestClassSearch =
     new DebugProvider.TestClassSearch(debugProvider, params)
 
   def mainClassSearch(
-    params: DebugUnresolvedMainClassParams,
+      params: DebugUnresolvedMainClassParams
   ): DebugProvider.MainClassSearch =
     new DebugProvider.MainClassSearch(debugProvider, params)
 
   def startTestSuite(
-    target: b.BuildTarget,
-    params: ScalaTestSuitesDebugRequest,
+      target: b.BuildTarget,
+      params: ScalaTestSuitesDebugRequest,
   ): Future[DebugSession] = debugProvider
     .startTestSuite(target, params)
     .flatMap(debugProvider.asSession)
@@ -1504,12 +1511,12 @@ abstract class MetalsLspService(
       .flatMap(_ => debugProvider.asSession(params))
 
   def discoverMainClasses(
-    unresolvedParams: DebugDiscoveryParams,
+      unresolvedParams: DebugDiscoveryParams
   ): Future[b.DebugSessionParams] =
     debugDiscovery.runCommandDiscovery(unresolvedParams)
 
   def supportsBuildTarget(
-    target: b.BuildTargetIdentifier,
+      target: b.BuildTargetIdentifier
   ): Option[b.BuildTarget] = buildTargets.info(target)
 
   val scalaCli: ScalaCliServers = register(
@@ -1528,7 +1535,7 @@ abstract class MetalsLspService(
       parseTreesAndPublishDiags,
       buildTargets,
       maxScalaCliServers,
-    ),
+    )
   )
 
   def buildData(): Seq[Indexer.BuildTool]
@@ -1568,7 +1575,7 @@ abstract class MetalsLspService(
   }
 
   protected def onWorksheetChanged(
-    paths: Seq[AbsolutePath],
+      paths: Seq[AbsolutePath]
   ): Future[Unit] = {
     paths
       .find { path =>
@@ -1580,7 +1587,7 @@ abstract class MetalsLspService(
         }
       }
       .fold(Future.successful(()))(
-        worksheetProvider.evaluateAndPublish(_, EmptyCancelToken),
+        worksheetProvider.evaluateAndPublish(_, EmptyCancelToken)
       )
       .flatMap { _ =>
         // we need to refresh tokens for worksheets since dependencies could have been added
@@ -1594,9 +1601,9 @@ abstract class MetalsLspService(
    * location. https://github.com/scalameta/metals/issues/755
    */
   def definitionOrReferences(
-    positionParams: TextDocumentPositionParams,
-    token: CancelToken = EmptyCancelToken,
-    definitionOnly: Boolean = false,
+      positionParams: TextDocumentPositionParams,
+      token: CancelToken = EmptyCancelToken,
+      definitionOnly: Boolean = false,
   ): Future[DefinitionResult] = {
     val source = positionParams.getTextDocument.getUri.toAbsolutePath
     if (source.isScalaFilename || source.isJavaFilename) {
@@ -1620,7 +1627,7 @@ abstract class MetalsLspService(
           // try to find its definitions from presentation compiler.
           definitionResult(positionParams, token).flatMap { definition =>
             def isOnDefinition = definition.locations.asScala.exists(
-              _.getRange().encloses(positionParams.getPosition()),
+              _.getRange().encloses(positionParams.getPosition())
             )
             if (!definitionOnly && isOnDefinition)
               getReferencesForGoToDefinition(positionParams, token)
@@ -1634,8 +1641,8 @@ abstract class MetalsLspService(
   }
 
   private def getReferencesForGoToDefinition(
-    positionParams: TextDocumentPositionParams,
-    token: CancelToken,
+      positionParams: TextDocumentPositionParams,
+      token: CancelToken,
   ) = {
     val refParams = new ReferenceParams(
       positionParams.getTextDocument(),
@@ -1656,7 +1663,7 @@ abstract class MetalsLspService(
             definition = None,
             semanticdb = None,
             querySymbol = results.head.symbol,
-          ),
+          )
         )
       }
     }
@@ -1669,8 +1676,8 @@ abstract class MetalsLspService(
    * The resolved symbol is used for testing purposes only.
    */
   def definitionResult(
-    position: TextDocumentPositionParams,
-    token: CancelToken = EmptyCancelToken,
+      position: TextDocumentPositionParams,
+      token: CancelToken = EmptyCancelToken,
   ): Future[DefinitionResult] = {
     val source = position.getTextDocument.getUri.toAbsolutePath
     if (source.isScalaFilename || source.isJavaFilename) {
@@ -1679,7 +1686,7 @@ abstract class MetalsLspService(
           "definition",
           clientConfig.initialConfig.statistics.isDefinition,
         )(
-          definitionProvider.definition(source, position, token),
+          definitionProvider.definition(source, position, token)
         )
       result.onComplete {
         case Success(value) =>
@@ -1710,7 +1717,7 @@ abstract class MetalsLspService(
               "invalid-symbol",
               s"""Symbol: ${e.symbol}""".stripMargin,
               e,
-            ),
+            )
           )
           scribe.error(s"searching for `${e.symbol}` failed", e.getCause)
         case _: NoSuchFileException =>

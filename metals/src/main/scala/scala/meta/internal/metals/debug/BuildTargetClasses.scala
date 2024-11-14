@@ -103,14 +103,6 @@ final class BuildTargetClasses(val buildTargets: BuildTargets)(implicit
               .map { klasses =>
                 cacheTestClasses(classes, klasses)
               }
-          // this would also possibly work if bazel-bsp complied with the spec.
-          // I don't know how to make it do that though
-          // val updateTestClasses =
-          //  connection
-          //    .jvmTestEnvironment(new b.JvmTestEnvironmentParams(targetsList))
-          //    .map { klasses =>
-          //      cacheTestClasses(classes, klasses)
-          //    }
 
           for {
             _ <- updateMainClasses
@@ -246,6 +238,7 @@ object TestFramework {
       case "munit" => MUnit
       case "ScalaTest" => Scalatest
       case "weaver-cats-effect" => WeaverCatsEffect
+      case "Specs2" => Specs2
       case _ => Unknown
     }
     .getOrElse(Unknown)
@@ -265,6 +258,10 @@ case object Scalatest extends TestFramework(true) {
       "org.scalatest.tools.Framework",
       "org.scalatest.tools.ScalaTestFramework",
     )
+}
+
+case object Specs2 extends TestFramework(true) {
+  def names: List[String] = List("org.specs2.runner.Specs2Framework")
 }
 
 case object WeaverCatsEffect extends TestFramework(true) {
