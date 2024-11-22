@@ -28,7 +28,7 @@ private[testProvider] final case class TestFileMetadata(
     hasTestCasesGranularity: Boolean,
 )
 
-private[testProvider] final case class TestEntry(
+private[metals] final case class TestEntry(
     buildTarget: BuildTarget,
     path: AbsolutePath,
     suiteDetails: TestSuiteDetails,
@@ -60,12 +60,9 @@ private[testProvider] final class TestSuitesIndex {
   /**
    * Cached, already discovered test suites per build target.
    *
-   * For every test suite a.TestSuiteName Metals returns 2 symbols,
-   * one for object and one for class.
-   * However, only one of them has location in source code and it's useful.
-   * That's why FullyQualifiedClassName is used as a key.
-   * "a/TestSuiteName., a.TestSuiteName"
-   * "a/TestSuiteName#, a.TestSuiteName"
+   * For every test suite a.TestSuiteName Metals returns 2 symbols, one for object and one for class. However, only one
+   * of them has location in source code and it's useful. That's why FullyQualifiedClassName is used as a key.
+   * "a/TestSuiteName., a.TestSuiteName" "a/TestSuiteName#, a.TestSuiteName"
    */
   private val cachedTestSuites =
     TrieMap[
@@ -109,8 +106,10 @@ private[testProvider] final class TestSuitesIndex {
 
   /**
    * Determine if test cases should be updated for a given file after compilation
-   * @param path - file path
-   * @param md5 - md5 of updated file
+   * @param path
+   *   \- file path
+   * @param md5
+   *   \- md5 of updated file
    */
   def shouldBeUpdated(path: AbsolutePath, md5: String): Boolean =
     fileToMetadata

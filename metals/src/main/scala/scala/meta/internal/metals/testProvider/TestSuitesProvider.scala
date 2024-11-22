@@ -22,17 +22,23 @@ import scala.meta.internal.metals.UserConfiguration
 import scala.meta.internal.metals.clients.language.MetalsLanguageClient
 import scala.meta.internal.metals.codelenses.CodeLens
 import scala.meta.internal.metals.debug.BuildTargetClasses
-import scala.meta.internal.metals.debug.JUnit4
-import scala.meta.internal.metals.debug.MUnit
-import scala.meta.internal.metals.debug.Scalatest
-import scala.meta.internal.metals.debug.TestFramework
-import scala.meta.internal.metals.debug.Unknown
-import scala.meta.internal.metals.debug.WeaverCatsEffect
+import scala.meta.internal.metals.debug.{
+  JUnit4,
+  MUnit,
+  Scalatest,
+  Specs2,
+  TestFramework,
+  Unknown,
+  WeaverCatsEffect,
+}
 import scala.meta.internal.metals.testProvider.TestExplorerEvent._
-import scala.meta.internal.metals.testProvider.frameworks.JunitTestFinder
-import scala.meta.internal.metals.testProvider.frameworks.MunitTestFinder
-import scala.meta.internal.metals.testProvider.frameworks.ScalatestTestFinder
-import scala.meta.internal.metals.testProvider.frameworks.WeaverCatsEffectTestFinder
+import scala.meta.internal.metals.testProvider.frameworks.{
+  JunitTestFinder,
+  MunitTestFinder,
+  ScalatestTestFinder,
+  SpecsTestFinder,
+  WeaverCatsEffectTestFinder,
+}
 import scala.meta.internal.mtags
 import scala.meta.internal.mtags.GlobalSymbolIndex
 import scala.meta.internal.mtags.Semanticdbs
@@ -72,6 +78,8 @@ final class TestSuitesProvider(
     new ScalatestTestFinder(trees, symbolIndex, semanticdbs)
   private val weaverCatsEffect =
     new WeaverCatsEffectTestFinder(trees, symbolIndex, semanticdbs)
+  private val specsTestFinder =
+    new SpecsTestFinder(trees, symbolIndex, semanticdbs)
 
   private def isExplorerEnabled = clientConfig.isTestExplorerProvider() &&
     userConfig().testUserInterface == TestUserInterfaceKind.TestExplorer
@@ -336,6 +344,13 @@ final class TestSuitesProvider(
                 suiteName = suite.fullyQualifiedName,
                 symbol = suite.symbol,
               )
+            case Specs2 =>
+              specsTestFinder.findTests(
+                doc = semanticdb,
+                path = path,
+                suiteName = suite.fullyQualifiedName,
+                symbol = suite.symbol,
+              )
             case Unknown => Vector.empty
           }
 
@@ -424,7 +439,7 @@ final class TestSuitesProvider(
       )
     // when test suite is deleted it has to be removed from cache
     symbolsPerTargetsWithEmpty.map {
-      case SymbolsPerTarget(buildTarget, testSymbols) =>
+      case SymbolsPerTarget(buildTarget, testSymbols) => {
         val fromBSP =
           testSymbols.values
             .map(info => FullyQualifiedName(info.fullyQualifiedName))
@@ -439,6 +454,7 @@ final class TestSuitesProvider(
             }
         }
         (buildTarget, removed)
+      }
     }.toMap
   }
 
@@ -463,7 +479,9 @@ final class TestSuitesProvider(
           .getCapabilities()
           .getCanTest()
       ) {
-        computeTestEntries(currentTarget.target)
+        val testEntries = computeTestEntries(currentTarget.target)
+        // buildTargetClasses.cacheTestClasses(currentTarget.target, testEntries)
+        testEntries
       } else {
         currentTarget.testSymbols
           .readOnlySnapshot()
@@ -526,7 +544,7 @@ final class TestSuitesProvider(
 
   private def computeTestEntries(buildTarget: BuildTarget): List[TestEntry] = {
     val sources = buildTargets.buildTargetSources(buildTarget.getId())
-    sources.flatMap { path =>
+    val ret = sources.flatMap { path =>
       val docOpt: Option[TextDocument] =
         semanticdbs().textDocument(path).documentIncludingStale
       val detailsPerClass = docOpt
@@ -540,6 +558,7 @@ final class TestSuitesProvider(
         )
       }
     }.toList
+    ret
   }
 
   /**

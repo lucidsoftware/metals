@@ -9,6 +9,7 @@ import scala.meta.internal.metals.BuildTargets
 import scala.meta.internal.metals.MetalsEnrichments._
 import scala.meta.internal.metals.debug.BuildTargetClasses.Classes
 import scala.meta.internal.metals.debug.BuildTargetClasses.TestSymbolInfo
+import scala.meta.internal.metals.testProvider.TestEntry
 import scala.meta.internal.semanticdb.Scala.Descriptor
 import scala.meta.internal.semanticdb.Scala.Symbols
 
@@ -169,6 +170,31 @@ final class BuildTargetClasses(val buildTargets: BuildTargets)(implicit
     } {
       classes(target).mainClasses.put(symbol, aClass)
     }
+  }
+
+  /*
+   * Caches test entries found by metals when the build server fails to provide them
+   */
+  def cacheTestClasses(
+      target: b.BuildTarget,
+      testEntries: List[TestEntry],
+  ): Unit = {
+    val targetId = target.getId()
+    val classes = new Classes
+    testEntries.foreach { testEntry =>
+      val details = testEntry.suiteDetails
+      val testInfo = BuildTargetClasses.TestSymbolInfo(
+        details.className
+          .asInstanceOf[BuildTargetClasses.FullyQualifiedClassName],
+        details.framework,
+      )
+      classes.testClasses.put(
+        details.symbol.value.asInstanceOf[BuildTargetClasses.Symbol],
+        testInfo,
+      )
+    }
+    index.put(targetId, classes)
+
   }
 
   private def cacheTestClasses(
