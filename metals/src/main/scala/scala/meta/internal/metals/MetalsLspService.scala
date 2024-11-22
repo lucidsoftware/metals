@@ -317,7 +317,11 @@ abstract class MetalsLspService(
   )
 
   protected val testFrameworkProvider: TestFrameworkProvider =
-    new TestFrameworkProvider(semanticdbs, trees)
+    new TestFrameworkProvider(
+      semanticdbs,
+      definitionIndex,
+      trees,
+    )
 
   protected val testProvider: TestSuitesProvider = new TestSuitesProvider(
     buildTargets,
