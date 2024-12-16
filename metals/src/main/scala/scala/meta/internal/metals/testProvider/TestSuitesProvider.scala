@@ -59,6 +59,7 @@ final class TestSuitesProvider(
     client: MetalsLanguageClient,
     folderName: String,
     folderUri: AbsolutePath,
+    testFrameworkProvider: TestFrameworkProvider,
 )(implicit ec: ExecutionContext)
     extends SemanticdbFeatureProvider
     with CodeLens {
@@ -169,7 +170,8 @@ final class TestSuitesProvider(
    * Check if opened file contains test suite and update test cases if yes.
    */
   def didOpen(file: AbsolutePath): Future[Unit] =
-    if (isExplorerEnabled && index.contains(file)) Future {
+    // no need to check the index, checking for tests in a single file is cheap
+    if (isExplorerEnabled) Future {
       val buildTargetUpdates = getTestCasesForPath(file, None)
       updateClientIfNonEmpty(buildTargetUpdates)
     }
@@ -451,34 +453,47 @@ final class TestSuitesProvider(
       // index will be updated later
       val currentlyCached = index.getSuiteNames(currentTarget.target)
       val cachedSuites = mutable.Set.from(currentlyCached)
-      currentTarget.testSymbols
-        .readOnlySnapshot()
-        .toList
-        // sort the symbols lexically so that symbols with the same fullyQualifiedName
-        // will be grouped, and the class will come before companion object (i.e.
-        // `a.b.WordSpec#` < `a.b.WordSpec.`). This ensures that the class is put into the cache
-        // instead of the companion object.
-        .sortBy { case (symbol, _) => symbol }
-        .foldLeft(List.empty[TestEntry]) {
-          case (entries, (symbol, testSymbolInfo)) =>
-            val fullyQualifiedName =
-              FullyQualifiedName(testSymbolInfo.fullyQualifiedName)
-            if (cachedSuites.contains(fullyQualifiedName)) entries
-            else {
-              val entryOpt = computeTestEntry(
-                currentTarget.target,
-                mtags.Symbol(symbol),
-                fullyQualifiedName,
-                testSymbolInfo,
-              )
-              entryOpt match {
-                case Some(entry) =>
-                  cachedSuites.add(entry.suiteDetails.fullyQualifiedName)
-                  entry :: entries
-                case None => entries
+
+      /* buildTarget/scalaTestClasses is deprecated in favor of buildTargetjvmTestEnvironment
+       * which doesn't provide a framework in the response.
+       * Since we'll need to find the framework here anyway, relying on it to get the "main" classes seems unnecessary.
+       */
+      if (
+        currentTarget.testSymbols.isEmpty && currentTarget.target
+          .getCapabilities()
+          .getCanTest()
+      ) {
+        computeTestEntries(currentTarget.target)
+      } else {
+        currentTarget.testSymbols
+          .readOnlySnapshot()
+          .toList
+          // sort the symbols lexically so that symbols with the same fullyQualifiedName
+          // will be grouped, and the class will come before companion object (i.e.
+          // `a.b.WordSpec#` < `a.b.WordSpec.`). This ensures that the class is put into the cache
+          // instead of the companion object.
+          .sortBy { case (symbol, _) => symbol }
+          .foldLeft(List.empty[TestEntry]) {
+            case (entries, (symbol, testSymbolInfo)) =>
+              val fullyQualifiedName =
+                FullyQualifiedName(testSymbolInfo.fullyQualifiedName)
+              if (cachedSuites.contains(fullyQualifiedName)) entries
+              else {
+                val entryOpt = computeTestEntry(
+                  currentTarget.target,
+                  mtags.Symbol(symbol),
+                  fullyQualifiedName,
+                  testSymbolInfo,
+                )
+                entryOpt match {
+                  case Some(entry) =>
+                    cachedSuites.add(entry.suiteDetails.fullyQualifiedName)
+                    entry :: entries
+                  case None => entries
+                }
               }
-            }
-        }
+          }
+      }
     }
 
     entries.groupBy(_.buildTarget)
@@ -506,6 +521,24 @@ final class TestSuitesProvider(
 
     aggregated.map { case (target, events) =>
       buildTargetUpdate(target, events)
+    }.toList
+  }
+
+  private def computeTestEntries(buildTarget: BuildTarget): List[TestEntry] = {
+    val sources = buildTargets.buildTargetSources(buildTarget.getId())
+    sources.flatMap { path =>
+      val docOpt: Option[TextDocument] =
+        semanticdbs().textDocument(path).documentIncludingStale
+      val detailsPerClass = docOpt
+        .map(testFrameworkProvider.getTestSuiteDetailsForPath(path, _))
+        .getOrElse(Nil)
+      detailsPerClass.map { suiteInfo =>
+        TestEntry(
+          buildTarget = buildTarget,
+          path = path,
+          suiteDetails = suiteInfo,
+        )
+      }
     }.toList
   }
 
