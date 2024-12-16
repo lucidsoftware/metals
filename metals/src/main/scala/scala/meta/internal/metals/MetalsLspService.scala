@@ -48,8 +48,11 @@ import scala.meta.internal.metals.formatting.RangeFormattingProvider
 import scala.meta.internal.metals.newScalaFile.NewFileProvider
 import scala.meta.internal.metals.scalacli.ScalaCli
 import scala.meta.internal.metals.scalacli.ScalaCliServers
-import scala.meta.internal.metals.testProvider.BuildTargetUpdate
-import scala.meta.internal.metals.testProvider.TestSuitesProvider
+import scala.meta.internal.metals.testProvider.{
+  BuildTargetUpdate,
+  TestSuitesProvider,
+  TestFrameworkProvider,
+}
 import scala.meta.internal.metals.watcher.FileWatcher
 import scala.meta.internal.mtags._
 import scala.meta.internal.parsing.ClassFinder
@@ -312,6 +315,9 @@ abstract class MetalsLspService(
     clientConfig.commandInHtmlFormat(),
   )
 
+  protected val testFrameworkProvider: TestFrameworkProvider =
+    new TestFrameworkProvider(semanticdbs, trees)
+
   protected val testProvider: TestSuitesProvider = new TestSuitesProvider(
     buildTargets,
     buildTargetClasses,
@@ -324,6 +330,7 @@ abstract class MetalsLspService(
     languageClient,
     getVisibleName,
     folder,
+    testFrameworkProvider,
   )
 
   protected val codeLensProvider: CodeLensProvider = {

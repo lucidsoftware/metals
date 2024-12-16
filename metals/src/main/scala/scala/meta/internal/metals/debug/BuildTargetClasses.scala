@@ -236,9 +236,14 @@ object TestFramework {
       case "munit" => MUnit
       case "ScalaTest" => Scalatest
       case "weaver-cats-effect" => WeaverCatsEffect
+      case "Specs2" => Specs2
       case _ => Unknown
     }
     .getOrElse(Unknown)
+}
+
+case object Specs2 extends TestFramework(true) {
+  def names: List[String] = List("org.specs2.runner.Specs2Framework")
 }
 
 case object JUnit4 extends TestFramework(true) {
