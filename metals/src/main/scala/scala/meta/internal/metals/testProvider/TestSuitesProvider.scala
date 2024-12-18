@@ -177,13 +177,45 @@ final class TestSuitesProvider(
   /**
    * Check if opened file contains test suite and update test cases if yes.
    */
-  def didOpen(file: AbsolutePath): Future[Unit] =
+  def didOpen(file: AbsolutePath): Future[Unit] = {
     // no need to check the index, checking for tests in a single file is cheap
     if (isExplorerEnabled) Future {
-      val buildTargetUpdates = getTestCasesForPath(file, None)
-      updateClientIfNonEmpty(buildTargetUpdates)
+      val targetOpt =
+        buildTargets.inverseSources(file).flatMap(buildTargets.info)
+      targetOpt.map { target =>
+        if (target.getCapabilities().getCanTest()) {
+          scribe.info(s"Calculating test cases for ${target.getId.getUri}")
+          // Note: this is terrible, bu t it's the best I could find.
+          // This could obviously use some cleanup if someone knows a way
+          val entries = Map(target -> computeTestEntries(target))
+          entries.values.foreach(_.foreach(index.put(_)))
+          val addedEntries = getTestCasesForPath(file, None)
+          val addedSuites =
+            entries.mapValues(_.map(_.suiteDetails.asAddEvent)).toMap
+          val addedTestCases = entries.mapValues {
+            _.flatMap { entry =>
+              val canResolve = entry.suiteDetails.framework.canResolveChildren
+              if (canResolve && buffers.contains(entry.path))
+                getTestCasesForSuites(
+                  entry.path,
+                  Vector(entry.suiteDetails),
+                  None,
+                )
+              else Nil
+            }
+          }.toMap
+          val buildTargetUpdates =
+            getBuildTargetUpdates(
+              Map.empty,
+              addedSuites,
+              addedTestCases,
+            )
+          updateClientIfNonEmpty(buildTargetUpdates ++ addedEntries)
+        }
+      }
     }
     else Future.unit
+  }
 
   /**
    * Discover tests:
@@ -390,7 +422,8 @@ final class TestSuitesProvider(
       }
 
     val deletedSuites = removeStaleTestSuites(symbolsPerTarget)
-    val addedEntries = getTestEntries(symbolsPerTarget)
+    val addedEntries: Map[BuildTarget, List[TestEntry]] =
+      getTestEntries(symbolsPerTarget)
 
     // update cached suites with currently discovered
     addedEntries.foreach { case (_, entries) =>
@@ -470,48 +503,34 @@ final class TestSuitesProvider(
       val currentlyCached = index.getSuiteNames(currentTarget.target)
       val cachedSuites = mutable.Set.from(currentlyCached)
 
-      /* buildTarget/scalaTestClasses is deprecated in favor of buildTargetjvmTestEnvironment
-       * which doesn't provide a framework in the response.
-       * Since we'll need to find the framework here anyway, relying on it to get the "main" classes seems unnecessary.
-       */
-      if (
-        currentTarget.testSymbols.isEmpty && currentTarget.target
-          .getCapabilities()
-          .getCanTest()
-      ) {
-        val testEntries = computeTestEntries(currentTarget.target)
-        // buildTargetClasses.cacheTestClasses(currentTarget.target, testEntries)
-        testEntries
-      } else {
-        currentTarget.testSymbols
-          .readOnlySnapshot()
-          .toList
-          // sort the symbols lexically so that symbols with the same fullyQualifiedName
-          // will be grouped, and the class will come before companion object (i.e.
-          // `a.b.WordSpec#` < `a.b.WordSpec.`). This ensures that the class is put into the cache
-          // instead of the companion object.
-          .sortBy { case (symbol, _) => symbol }
-          .foldLeft(List.empty[TestEntry]) {
-            case (entries, (symbol, testSymbolInfo)) =>
-              val fullyQualifiedName =
-                FullyQualifiedName(testSymbolInfo.fullyQualifiedName)
-              if (cachedSuites.contains(fullyQualifiedName)) entries
-              else {
-                val entryOpt = computeTestEntry(
-                  currentTarget.target,
-                  mtags.Symbol(symbol),
-                  fullyQualifiedName,
-                  testSymbolInfo,
-                )
-                entryOpt match {
-                  case Some(entry) =>
-                    cachedSuites.add(entry.suiteDetails.fullyQualifiedName)
-                    entry :: entries
-                  case None => entries
-                }
+      currentTarget.testSymbols
+        .readOnlySnapshot()
+        .toList
+        // sort the symbols lexically so that symbols with the same fullyQualifiedName
+        // will be grouped, and the class will come before companion object (i.e.
+        // `a.b.WordSpec#` < `a.b.WordSpec.`). This ensures that the class is put into the cache
+        // instead of the companion object.
+        .sortBy { case (symbol, _) => symbol }
+        .foldLeft(List.empty[TestEntry]) {
+          case (entries, (symbol, testSymbolInfo)) =>
+            val fullyQualifiedName =
+              FullyQualifiedName(testSymbolInfo.fullyQualifiedName)
+            if (cachedSuites.contains(fullyQualifiedName)) entries
+            else {
+              val entryOpt = computeTestEntry(
+                currentTarget.target,
+                mtags.Symbol(symbol),
+                fullyQualifiedName,
+                testSymbolInfo,
+              )
+              entryOpt match {
+                case Some(entry) =>
+                  cachedSuites.add(entry.suiteDetails.fullyQualifiedName)
+                  entry :: entries
+                case None => entries
               }
-          }
-      }
+            }
+        }
     }
 
     entries.groupBy(_.buildTarget)
@@ -544,7 +563,7 @@ final class TestSuitesProvider(
 
   private def computeTestEntries(buildTarget: BuildTarget): List[TestEntry] = {
     val sources = buildTargets.buildTargetSources(buildTarget.getId())
-    val ret = sources.flatMap { path =>
+    sources.flatMap { path =>
       val docOpt: Option[TextDocument] =
         semanticdbs().textDocument(path).documentIncludingStale
       val detailsPerClass = docOpt
@@ -558,7 +577,6 @@ final class TestSuitesProvider(
         )
       }
     }.toList
-    ret
   }
 
   /**
